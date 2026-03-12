@@ -8,7 +8,8 @@ app.use(express.json());
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false }
+  ssl: { rejectUnauthorized: false },
+  connectionTimeoutMillis: 5000,
 });
 
 async function initDB() {
@@ -31,7 +32,7 @@ async function initDB() {
     `);
     console.log("Tablas de orders listas");
   } catch (error) {
-    console.error("Error creando tablas:", error);
+    console.error("Error creando tablas:", error.message);
   }
 }
 
@@ -57,7 +58,8 @@ app.post("/orders", async (req, res) => {
     }
     res.status(201).json({ message: "Orden creada", order_id: order.id, total });
   } catch (error) {
-    res.status(500).json({ error: "Error creando orden" });
+    console.error("Error POST orders:", error.message);
+    res.status(500).json({ error: error.message });
   }
 });
 
@@ -67,7 +69,8 @@ app.get("/orders", async (req, res) => {
     const items = await pool.query("SELECT * FROM order_items");
     res.json({ orders: orders.rows, items: items.rows });
   } catch (error) {
-    res.status(500).json({ error: "Error obteniendo órdenes" });
+    console.error("Error GET orders:", error.message);
+    res.status(500).json({ error: error.message });
   }
 });
 

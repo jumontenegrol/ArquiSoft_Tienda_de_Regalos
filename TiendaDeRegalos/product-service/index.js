@@ -8,9 +8,11 @@ app.use(express.json());
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false }
+  ssl: { rejectUnauthorized: false },
+  connectionTimeoutMillis: 5000,
 });
 
+// ✅ Inicializar tabla una sola vez al arrancar
 async function initDB() {
   try {
     await pool.query(`
@@ -30,7 +32,7 @@ async function initDB() {
     `);
     console.log("Tabla products lista");
   } catch (error) {
-    console.error("Error inicializando DB:", error);
+    console.error("Error inicializando DB:", error.message);
   }
 }
 
@@ -41,7 +43,8 @@ app.get("/products", async (req, res) => {
     const result = await pool.query("SELECT * FROM products");
     res.json(result.rows);
   } catch (error) {
-    res.status(500).json({ error: "Error obteniendo productos" });
+    console.error("Error GET products:", error.message);
+    res.status(500).json({ error: error.message }); // ✅ mensaje real
   }
 });
 
@@ -55,7 +58,8 @@ app.post("/products", async (req, res) => {
     );
     res.json(result.rows[0]);
   } catch (error) {
-    res.status(500).json({ error: "Error creando producto", detalle: error.message });
+    console.error("Error POST products:", error.message);
+    res.status(500).json({ error: error.message });
   }
 });
 
@@ -69,7 +73,8 @@ app.put("/products/:id", async (req, res) => {
     );
     res.json(result.rows[0]);
   } catch (error) {
-    res.status(500).json({ error: "Error actualizando precio" });
+    console.error("Error PUT products:", error.message);
+    res.status(500).json({ error: error.message });
   }
 });
 
@@ -87,7 +92,8 @@ app.put("/products/:id/stock", async (req, res) => {
     );
     res.json(result.rows[0]);
   } catch (error) {
-    res.status(500).json({ error: "Error actualizando stock" });
+    console.error("Error PUT stock:", error.message);
+    res.status(500).json({ error: error.message });
   }
 });
 
@@ -97,7 +103,8 @@ app.delete("/products/:id", async (req, res) => {
     await pool.query("DELETE FROM products WHERE id=$1", [id]);
     res.json({ message: "Producto eliminado" });
   } catch (error) {
-    res.status(500).json({ error: "Error eliminando producto" });
+    console.error("Error DELETE products:", error.message);
+    res.status(500).json({ error: error.message });
   }
 });
 

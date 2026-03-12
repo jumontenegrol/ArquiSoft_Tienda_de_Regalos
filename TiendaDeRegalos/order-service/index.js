@@ -36,14 +36,13 @@ async function initDB() {
   }
 }
 
-initDB();
-
 app.post("/orders", async (req, res) => {
   const { items } = req.body;
   if (!items || items.length === 0) {
     return res.status(400).json({ error: "No hay items en la orden" });
   }
   try {
+    await initDB();
     const total = items.reduce((sum, item) => sum + item.precio_unitario * item.cantidad, 0);
     const orderResult = await pool.query(
       "INSERT INTO orders (total) VALUES ($1) RETURNING *", [total]
@@ -65,6 +64,7 @@ app.post("/orders", async (req, res) => {
 
 app.get("/orders", async (req, res) => {
   try {
+    await initDB();
     const orders = await pool.query("SELECT * FROM orders");
     const items = await pool.query("SELECT * FROM order_items");
     res.json({ orders: orders.rows, items: items.rows });

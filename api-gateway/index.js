@@ -6,9 +6,9 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-const PRODUCT_SERVICE_URL = process.env.PRODUCT_SERVICE_URL;
-const ORDER_SERVICE_URL = process.env.ORDER_SERVICE_URL;
-const REVIEW_SERVICE_URL = process.env.REVIEW_SERVICE_URL;
+const PRODUCT_SERVICE_URL = process.env.PRODUCT_SERVICE_URL || "http://product-service:4000";
+const ORDER_SERVICE_URL   = process.env.ORDER_SERVICE_URL   || "http://order-service:5000";
+const REVIEW_SERVICE_URL  = process.env.REVIEW_SERVICE_URL  || "http://review-service:6000";
 
 app.get("/", (req, res) => {
   res.send("API Gateway funcionando");
@@ -20,8 +20,15 @@ app.post("/api/products", async (req, res) => {
     const response = await axios.post(`${PRODUCT_SERVICE_URL}/products`, req.body);
     res.json(response.data);
   } catch (error) {
-    res.status(500).json({ error: "Error creando producto" });
+  console.error("ERROR creando producto:");
+  console.error("URL:", `${PRODUCT_SERVICE_URL}/products`);
+  console.error(error.message);
+  if (error.response) {
+    console.error("DATA:", error.response.data);
   }
+  res.status(500).json({ error: "Error creando producto" });
+}
+
 });
 
 //Cambiar precio
@@ -117,3 +124,9 @@ app.delete("/api/reviews/:id", async (req, res) => {
 });
 
 module.exports = app;
+
+// Start API gateway server when node runs this file
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`API Gateway listening on port ${PORT}`);
+});

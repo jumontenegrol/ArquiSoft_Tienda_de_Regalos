@@ -18,11 +18,18 @@ app.add_middleware(
 )
 
 def connect_db():
-    mongo_uri = os.getenv("MONGO_URI")
-    client = MongoClient(mongo_uri, serverSelectionTimeoutMS=5000)
-    client.admin.command("ping")
-    print("Conectado a MongoDB")
-    return client["reviewsdb"]["reviews"]
+    mongo_uri = os.getenv("MONGO_URI", "mongodb://mongo:27017/reviewsdb")
+
+    while True:
+        try:
+            client = MongoClient(mongo_uri, serverSelectionTimeoutMS=2000)
+            client.admin.command("ping")
+            print("✅ Conectado a MongoDB")
+            return client["reviewsdb"]["reviews"]
+        except ConnectionFailure as e:
+            print("⏳ Esperando MongoDB...", str(e))
+            time.sleep(2)
+
 
 collection = connect_db()
 

@@ -6,14 +6,41 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false },
-  connectionTimeoutMillis: 5000,
-});
+const pool = new Pool(
+  process.env.DATABASE_URL
+    ? {
+        connectionString: process.env.DATABASE_URL,
+        ssl: process.env.NODE_ENV === "production"
+          ? { rejectUnauthorized: false }
+          : false,
+      }
+    : {
+        host: process.env.DB_HOST || "postgres",
+        user: process.env.DB_USER || "admin",
+        password: process.env.DB_PASSWORD || "admin",
+        database: process.env.DB_NAME || "giftshop",
+        port: process.env.DB_PORT || 5432,
+      }
+);
 
+
+async function waitForDB() {
 // ✅ Inicializar tabla una sola vez al arrancar
+  let connected = false;
+  while (!connected) {
+    try {
+      await pool.query("SELECT 1");
+      connected = true;
+      console.log("Conectado a PostgreSQL");
+    } catch (error) {
+      console.log("Esperando a PostgreSQL...");
+      await new Promise(res => setTimeout(res, 2000));
+    }
+  }
+}
+
 async function initDB() {
+  await waitForDB();
   try {
     await pool.query(`
       CREATE TABLE IF NOT EXISTS products (
@@ -109,3 +136,9 @@ app.delete("/products/:id", async (req, res) => {
 });
 
 module.exports = app;
+
+// Start server when run as main
+const PORT = process.env.PORT || 4000;
+app.listen(PORT, () => {
+  console.log(`Product service listening on port ${PORT}`);
+});

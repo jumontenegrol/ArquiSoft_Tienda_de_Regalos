@@ -64,10 +64,29 @@ export default function AdminPage() {
         fetch(`${API}/api/products`),
         fetch(`${API}/api/orders`),
       ]);
-      setProductos(await pRes.json());
+      const pData = await pRes.json();
+      if (!pRes.ok) {
+        console.error("Error GET /api/products:", pData);
+        showToast("Error obteniendo productos", "error");
+        setProductos([]);
+      } else if (!Array.isArray(pData)) {
+        console.error("Products endpoint returned non-array:", pData);
+        showToast("Respuesta inválida de productos", "error");
+        setProductos([]);
+      } else {
+        setProductos(pData);
+      }
+
       const oData = await oRes.json();
-      setOrdenes(oData.orders || []);
-      setItems(oData.items || []);
+      if (!oRes.ok || typeof oData !== "object") {
+        console.error("Error GET /api/orders:", oData);
+        showToast("Error obteniendo órdenes", "error");
+        setOrdenes([]);
+        setItems([]);
+      } else {
+        setOrdenes(oData.orders || []);
+        setItems(oData.items || []);
+      }
     } catch { showToast("Error cargando datos", "error"); }
   }
 
@@ -77,11 +96,17 @@ export default function AdminPage() {
       return;
     }
     try {
-      await fetch(`${API}/api/products`, {
+      const res = await fetch(`${API}/api/products`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...form, precio: parseFloat(form.precio), stock: parseInt(form.stock) || 0 }),
       });
+      const data = await res.json();
+      if (!res.ok) {
+        console.error("Error creating product:", data);
+        showToast(data.error || "Error creando producto", "error");
+        return;
+      }
       showToast("✅ Producto creado correctamente", "success");
       setForm({ nombre: "", descripcion: "", precio: "", stock: "", imagen1: "", imagen2: "", imagen3: "" });
       cargarDatos();

@@ -7,19 +7,23 @@ app.use(cors());
 app.use(express.json());
 
 // ── Pool: Vercel usa DATABASE_URL, local usa credenciales directas ──
-const pool = process.env.DATABASE_URL
-  ? new Pool({
-      connectionString: process.env.DATABASE_URL,
-      ssl: { rejectUnauthorized: false },
-      connectionTimeoutMillis: 5000,
-    })
-  : new Pool({
-      user: "admin",
-      host: "orders-postgres",
-      database: "ordersdb",
-      password: "admin",
-      port: 5432,
-    });
+const pool = new Pool(
+  process.env.DATABASE_URL
+    ? {
+        connectionString: process.env.DATABASE_URL,
+        ssl: process.env.NODE_ENV === "production"
+          ? { rejectUnauthorized: false }
+          : false,
+      }
+    : {
+        host: process.env.DB_HOST || "orders-postgres",
+        user: process.env.DB_USER || "admin",
+        password: process.env.DB_PASSWORD || "admin",
+        database: process.env.DB_NAME || "ordersdb",
+        port: process.env.DB_PORT || 5432,
+      }
+);
+
 
 // ── RabbitMQ: solo en local (Docker), ignorado en Vercel ──
 const RABBITMQ_URL = process.env.RABBITMQ_URL || null;
@@ -43,8 +47,24 @@ async function connectRabbitMQ() {
   }
 }
 
+// ── Esperar PostgreSQL ─────────────────────────────────
+async function waitForDB() {
+  let connected = false;
+  while (!connected) {
+    try {
+      await pool.query("SELECT 1");
+      connected = true;
+      console.log("✅ Conectado a PostgreSQL (Orders)");
+    } catch {
+      console.log("⏳ Esperando PostgreSQL (Orders)...");
+      await new Promise(r => setTimeout(r, 2000));
+    }
+  }
+}
+
 // ── Inicializar tablas ─────────────────────────────────
 async function initDB() {
+  await waitForDB();
   try {
     await pool.query(`
       CREATE TABLE IF NOT EXISTS orders (
@@ -53,6 +73,7 @@ async function initDB() {
         total INTEGER
       );
     `);
+
     await pool.query(`
       CREATE TABLE IF NOT EXISTS order_items (
         id SERIAL PRIMARY KEY,
@@ -62,16 +83,22 @@ async function initDB() {
         precio_unitario INTEGER
       );
     `);
+
     console.log("✅ Tablas de orders listas");
   } catch (error) {
     console.error("Error creando tablas:", error.message);
   }
 }
 
+
 // ── Arranque (solo en local, no bloquea Vercel) ────────
-if (!process.env.DATABASE_URL) {
-  connectRabbitMQ().then(() => initDB());
+async function start() {
+  await connectRabbitMQ();
+  await initDB();
 }
+
+start();
+
 
 // ── Crear orden ────────────────────────────────────────
 app.post("/orders", async (req, res) => {
@@ -128,3 +155,7 @@ app.get("/orders", async (req, res) => {
 });
 
 module.exports = app;
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, () => {
+  console.log(`Product service listening on port ${PORT}`);
+});

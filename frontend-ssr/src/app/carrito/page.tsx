@@ -3,44 +3,99 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import ConfirmModal from "../../components/ConfirmModal";
 import { showToast } from "../../components/Toast";
+// MODIFICACIÓN: Importaciones para manejar la sesión y la API persistente
+import { getCookie } from "cookies-next";
+import { getCart, addToCart, removeFromCart, getProductos } from "../../lib/api";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
 
 export default function CarritoPage() {
   const [carrito, setCarrito] = useState<any[]>([]);
   const [confirmIndex, setConfirmIndex] = useState<number | null>(null);
+  // MODIFICACIÓN: Estado para manejar la carga de datos
+  const [loading, setLoading] = useState(true);
+  const token = getCookie("token");
 
+  // MODIFICACIÓN: El useEffect ahora dispara la carga enriquecida desde el servidor
   useEffect(() => {
-    setCarrito(JSON.parse(localStorage.getItem("carrito") || "[]"));
-  }, []);
+    if (token) {
+      cargarCarritoCompleto();
+    } else {
+      setLoading(false);
+    }
+  }, [token]);
 
-  function guardar(c: any[]) {
-    setCarrito(c);
-    localStorage.setItem("carrito", JSON.stringify(c));
+  // CREACIÓN: Función que cruza los IDs de tu carrito (Postgres) con los detalles del catálogo
+  async function cargarCarritoCompleto() {
+    try {
+      // 1. Obtener items básicos (product_id y cantidad) del microservicio de órdenes
+      const itemsDB = await getCart(token as string); 
+      
+      // 2. Obtener lista completa de productos para extraer nombres, precios e imágenes
+      const catalogo = await getProductos(); 
+
+      // 3. Enriquecimiento: Mapeamos los items de la DB con la info del catálogo
+      const carritoConDatos = (itemsDB || []).map((itemDB: any) => {
+        const productoInfo = catalogo.find((p: any) => String(p.id) === String(itemDB.product_id));
+        
+        return {
+          ...itemDB,
+          nombre: productoInfo ? productoInfo.nombre : `Producto #${itemDB.product_id}`,
+          precio_unitario: productoInfo ? productoInfo.precio : 0,
+          imagen1: productoInfo ? productoInfo.imagen1 : null,
+          stock: productoInfo ? productoInfo.stock : 0
+        };
+      });
+
+      setCarrito(carritoConDatos);
+    } catch (error) {
+      showToast("Error al sincronizar el carrito", "error");
+    } finally {
+      setLoading(false);
+    }
   }
 
-  function cambiarCantidad(index: number, cambio: number) {
-    const nuevo = [...carrito];
-    const item = nuevo[index];
+  // MODIFICACIÓN: Ahora las funciones de guardado actualizan el estado en el servidor
+  async function guardarCambioCantidad(productId: number, cambio: number) {
+    try {
+      await addToCart(productId, cambio, token as string);
+      await cargarCarritoCompleto(); // Recargamos para ver datos frescos
+    } catch {
+      showToast("No se pudo actualizar la cantidad", "error");
+    }
+  }
+
+  async function cambiarCantidad(index: number, cambio: number) {
+    const item = carrito[index];
     const nuevaCantidad = item.cantidad + cambio;
+    
+    // Validación de stock mantenida del original
     if (nuevaCantidad > item.stock) {
       showToast(`Solo hay ${item.stock} unidades de "${item.nombre}"`, "warning");
       return;
     }
-    if (nuevaCantidad <= 0) nuevo.splice(index, 1);
-    else nuevo[index].cantidad = nuevaCantidad;
-    guardar(nuevo);
+
+    if (nuevaCantidad <= 0) {
+      confirmarEliminar(index);
+    } else {
+      await guardarCambioCantidad(item.product_id, cambio);
+    }
   }
 
   function confirmarEliminar(index: number) { setConfirmIndex(index); }
 
-  function eliminarItem() {
+  // MODIFICACIÓN: Elimina el registro físico en la base de datos de PostgreSQL
+  async function eliminarItem() {
     if (confirmIndex === null) return;
-    const nuevo = [...carrito];
-    nuevo.splice(confirmIndex, 1);
-    guardar(nuevo);
-    setConfirmIndex(null);
-    showToast("Producto eliminado del carrito", "info");
+    const item = carrito[confirmIndex];
+    try {
+      await removeFromCart(item.product_id, token as string);
+      showToast("Producto eliminado del carrito", "info");
+      setConfirmIndex(null);
+      await cargarCarritoCompleto();
+    } catch {
+      showToast("Error al eliminar el producto", "error");
+    }
   }
 
   async function finalizarCompra() {
@@ -48,25 +103,44 @@ export default function CarritoPage() {
     try {
       const res = await fetch(`${API}/api/orders`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}` 
+        },
         body: JSON.stringify({ items: carrito }),
       });
       if (!res.ok) throw new Error();
+
+      // Limpieza del carrito en la base de datos tras la compra
       for (const item of carrito) {
-        await fetch(`${API}/api/products/${item.product_id}/stock`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ cantidad: item.cantidad }),
-        });
+        await removeFromCart(item.product_id, token as string);
       }
+
       showToast("¡Compra realizada correctamente! 🎉", "success");
-      guardar([]);
+      setCarrito([]);
     } catch {
       showToast("Error procesando la compra", "error");
     }
   }
 
-  const total = carrito.reduce((s, i) => s + i.precio_unitario * i.cantidad, 0);
+  // MODIFICACIÓN: Bloque de seguridad para obligar al login
+  if (!token) {
+    return (
+      <main className="max-w-md mx-auto mt-20 p-8 bg-white shadow-xl rounded-2xl text-center border-t-4 border-yellow-400">
+        <p className="text-6xl mb-4">🔑</p>
+        <h2 className="text-2xl font-bold text-gray-800 mb-4">¡Logéate primero!</h2>
+        <p className="text-gray-500 mb-6">Tu carrito ahora es personal y persistente. Inicia sesión para ver tus productos guardados.</p>
+        <Link href="/login" className="bg-yellow-400 text-white px-8 py-3 rounded-xl font-bold hover:bg-yellow-500 shadow-lg">
+          Ingresar
+        </Link>
+      </main>
+    );
+  }
+
+  if (loading) return <p className="text-center mt-20 text-yellow-500 font-bold italic">Cargando tus regalos... 🎁</p>;
+
+  // Cálculo del total corregido para evitar el NaN
+  const total = carrito.reduce((s, i) => s + (i.precio_unitario * i.cantidad), 0);
 
   return (
     <main className="max-w-2xl mx-auto p-4 sm:p-6">
@@ -88,7 +162,7 @@ export default function CarritoPage() {
               <div className="flex-1 min-w-0">
                 <h2 className="font-bold text-gray-800 truncate">{item.nombre}</h2>
                 <p className="text-yellow-500 font-semibold">${item.precio_unitario}</p>
-                <p className="text-xs text-gray-400">Stock: {item.stock}</p>
+                <p className="text-xs text-gray-400">Stock disponible: {item.stock}</p>
               </div>
               <div className="flex items-center gap-3">
                 <button onClick={() => cambiarCantidad(i, -1)}

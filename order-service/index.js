@@ -84,6 +84,18 @@ async function initDB() {
       );
     `);
 
+    //Nueva tabla para el Carrito Persistente
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS cart_items (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL,
+        product_id INTEGER NOT NULL,
+        cantidad INTEGER DEFAULT 1,
+        fecha_agregado TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(user_id, product_id) -- Evita duplicados, permite sumar cantidad
+      );
+    `);
+
     console.log("✅ Tablas de orders listas");
   } catch (error) {
     console.error("Error creando tablas:", error.message);
@@ -98,6 +110,61 @@ async function start() {
 }
 
 start();
+
+// Obtener el carrito de un usuario específico mediante x-user-id (enviado por el Gateway)
+app.get("/cart", async (req, res) => {
+  const userId = req.headers["x-user-id"]; 
+  if (!userId) return res.status(401).json({ error: "No autenticado" });
+
+  try {
+    const result = await pool.query(
+      "SELECT * FROM cart_items WHERE user_id = $1 ORDER BY fecha_agregado DESC",
+      [userId]
+    );
+    res.json(result.rows);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Añadir productos al carrito con lógica de actualización si ya existen (Upsert)
+app.post("/cart", async (req, res) => {
+  const userId = req.headers["x-user-id"];
+  const { product_id, cantidad } = req.body;
+
+  if (!userId) return res.status(401).json({ error: "No autenticado" });
+
+  try {
+    await pool.query(
+      `INSERT INTO cart_items (user_id, product_id, cantidad)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (user_id, product_id) 
+       DO UPDATE SET cantidad = cart_items.cantidad + EXCLUDED.cantidad`,
+      [userId, product_id, cantidad || 1]
+    );
+    res.status(201).json({ message: "Producto añadido al carrito" });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Eliminar un producto específico del carrito del usuario
+app.delete("/cart/:productId", async (req, res) => {
+  const userId = req.headers["x-user-id"];
+  const { productId } = req.params;
+
+  if (!userId) return res.status(401).json({ error: "No autenticado" });
+
+  try {
+    await pool.query(
+      "DELETE FROM cart_items WHERE user_id = $1 AND product_id = $2",
+      [userId, productId]
+    );
+    res.json({ message: "Producto eliminado del carrito" });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
 
 
 // ── Crear orden ────────────────────────────────────────

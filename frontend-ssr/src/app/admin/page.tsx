@@ -4,6 +4,7 @@ import Link from "next/link";
 import { showToast } from "../../components/Toast";
 // Use the auto bundle which registers required components automatically
 import Chart from "chart.js/auto";
+import { getCookie } from "cookies-next";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
 
@@ -59,10 +60,13 @@ export default function AdminPage() {
   }, [items]);
 
   async function cargarDatos() {
+    const token = getCookie("token");
     try {
       const [pRes, oRes] = await Promise.all([
         fetch(`${API}/api/products`),
-        fetch(`${API}/api/orders`),
+        fetch(`${API}/api/orders`, {
+          headers: { "Authorization": `Bearer ${token}` }
+        }),
       ]);
       const pData = await pRes.json();
       if (!pRes.ok) {
@@ -95,10 +99,12 @@ export default function AdminPage() {
       showToast("Nombre y precio son obligatorios", "warning");
       return;
     }
+    const token = getCookie("token");
+
     try {
       const res = await fetch(`${API}/api/products`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
         body: JSON.stringify({ ...form, precio: parseFloat(form.precio), stock: parseInt(form.stock) || 0 }),
       });
       const data = await res.json();
@@ -116,10 +122,13 @@ export default function AdminPage() {
   async function cambiarPrecio(id: number) {
     const nuevo = prompt("Nuevo precio:");
     if (!nuevo) return;
+    
+    const token = getCookie("token");
+
     try {
       await fetch(`${API}/api/products/${id}`, {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
         body: JSON.stringify({ precio: parseFloat(nuevo) }),
       });
       showToast("Precio actualizado", "success");
@@ -129,8 +138,12 @@ export default function AdminPage() {
 
   async function eliminarProducto(id: number) {
     if (!confirm("¿Eliminar producto?")) return;
+    const token = getCookie("token");
     try {
-      await fetch(`${API}/api/products/${id}`, { method: "DELETE" });
+      await fetch(`${API}/api/products/${id}`, { 
+        method: "DELETE",
+        headers: { "Authorization": `Bearer ${token}` }
+      });
       showToast("Producto eliminado", "info");
       cargarDatos();
     } catch { showToast("Error eliminando producto", "error"); }

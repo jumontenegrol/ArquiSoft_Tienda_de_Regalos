@@ -1,6 +1,7 @@
 const express = require("express");
 const cors = require("cors");
 const { Pool } = require("pg");
+const { connect: connectRabbit, publishOrderCreated } = require("./rabbitmq");
 
 const app = express();
 app.use(cors());
@@ -23,29 +24,6 @@ const pool = new Pool(
         port: process.env.DB_PORT || 5432,
       }
 );
-
-
-// ── RabbitMQ: solo en local (Docker), ignorado en Vercel ──
-const RABBITMQ_URL = process.env.RABBITMQ_URL || null;
-const QUEUE = "orders_queue";
-let rabbitChannel = null;
-
-async function connectRabbitMQ() {
-  if (!RABBITMQ_URL) {
-    console.log("ℹ️ RabbitMQ no configurado (modo Vercel), se omite.");
-    return;
-  }
-  try {
-    const amqp = require("amqplib");
-    const conn = await amqp.connect(RABBITMQ_URL);
-    const channel = await conn.createChannel();
-    await channel.assertQueue(QUEUE, { durable: true });
-    rabbitChannel = channel;
-    console.log("✅ Conectado a RabbitMQ");
-  } catch (err) {
-    console.log("⚠️ RabbitMQ no disponible:", err.message);
-  }
-}
 
 // ── Esperar PostgreSQL ─────────────────────────────────
 async function waitForDB() {
@@ -90,19 +68,21 @@ async function initDB() {
   }
 }
 
-
-// ── Arranque (solo en local, no bloquea Vercel) ────────
+// ── Arranque (RabbitMQ + DB) ───────────────────────────
 async function start() {
-  await connectRabbitMQ();
+  if (process.env.RABBITMQ_URL) {
+    connectRabbit().catch(() => {});
+  } else {
+    console.log("ℹ️  RabbitMQ no configurado (modo Vercel), se omite.");
+  }
   await initDB();
 }
 
 start();
 
-
 // ── Crear orden ────────────────────────────────────────
 app.post("/orders", async (req, res) => {
-  const { items } = req.body;
+  const { items, userId } = req.body;
   if (!items || items.length === 0) {
     return res.status(400).json({ error: "No hay items en la orden" });
   }
@@ -124,15 +104,14 @@ app.post("/orders", async (req, res) => {
       );
     }
 
-    // ✅ Publicar en RabbitMQ solo si está disponible (local)
-    if (rabbitChannel) {
-      rabbitChannel.sendToQueue(
-        QUEUE,
-        Buffer.from(JSON.stringify({ order_id: order.id, total, items })),
-        { persistent: true }
-      );
-      console.log(`📤 Orden ${order.id} publicada en RabbitMQ`);
-    }
+    // ── Publicar evento order.created ──
+    publishOrderCreated({
+      orderId: order.id,
+      userId: userId || null,
+      total,
+      items,
+      status: "created",
+    });
 
     res.status(201).json({ message: "Orden creada", order_id: order.id, total });
   } catch (error) {
@@ -157,5 +136,5 @@ app.get("/orders", async (req, res) => {
 module.exports = app;
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
-  console.log(`Product service listening on port ${PORT}`);
+  console.log(`Order service listening on port ${PORT}`);
 });

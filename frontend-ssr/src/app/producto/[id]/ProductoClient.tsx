@@ -3,6 +3,8 @@ import { useState } from "react";
 import Link from "next/link";
 import StarRating from "../../../components/StarRating";
 import { showToast } from "../../../components/Toast";
+import { getCookie } from "cookies-next"; // Importante: para validar sesión
+import { addToCart } from "../../../lib/api"; // Nueva función
 
 const API = typeof window !== "undefined"
   ? (process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000")
@@ -17,31 +19,32 @@ export default function ProductoClient({ producto, reseñasIniciales }: { produc
 
   const imagenes = [producto.imagen1, producto.imagen2, producto.imagen3].filter(Boolean);
 
-  function agregarAlCarrito() {
-    const carrito = JSON.parse(localStorage.getItem("carrito") || "[]");
-    const existente = carrito.find((i: any) => i.product_id === producto.id);
-    if (existente) {
-      if (existente.cantidad >= producto.stock) {
-        showToast(`Solo hay ${producto.stock} unidades disponibles`, "warning");
-        return;
-      }
-      existente.cantidad += 1;
-    } else {
-      if (producto.stock <= 0) {
-        showToast(`"${producto.nombre}" está agotado`, "error");
-        return;
-      }
-      carrito.push({
-        product_id: producto.id,
-        nombre: producto.nombre,
-        precio_unitario: producto.precio,
-        stock: producto.stock,
-        imagen1: producto.imagen1,
-        cantidad: 1,
-      });
+  async function agregarAlCarrito() {
+    // 1. Obtenemos el token de la sesión
+    const token = getCookie("token");
+
+    // 2. Validación de Seguridad: Si no está logueado, no puede agregar al carrito
+    if (!token) {
+      showToast("Debes iniciar sesión para agregar productos al carrito 🔑", "warning");
+      // Opcional: podrías redirigir al login
+      window.location.href = "/login";
+      return;
     }
-    localStorage.setItem("carrito", JSON.stringify(carrito));
-    showToast("Producto agregado al carrito 🛒", "success");
+
+    try {
+      // 3. Llamada al API Gateway (que luego pasará el x-user-id al order-service)
+      // Enviamos el ID del producto, la cantidad (1) y el token para validación
+      const res = await addToCart(producto.id, 1, token as string);
+      
+      if (res) {
+        showToast("Producto guardado en tu carrito de la nube 🛒", "success");
+      } else {
+        showToast("No se pudo guardar el producto en el servidor", "error");
+      }
+    } catch (error) {
+      console.error("Error en la petición de carrito:", error);
+      showToast("Error de conexión con el servicio de órdenes", "error");
+    }
   }
 
   async function enviarReseña() {

@@ -11,3 +11,13 @@ body {
 .font-alfa {
   font-family: 'Alfa Slab One', cursive;
 }
+
+/* Small, non-invasive animation for toasts to improve visual polish. */
+.animate-slide-in {
+  animation: slideIn 220ms ease-out;
+}
+
+@keyframes slideIn {
+  from { transform: translateY(-6px); opacity: 0; }
+  to   { transform: translateY(0); opacity: 1; }
+}

@@ -1,14 +1,32 @@
-// En SSR, API_URL usa el nombre del servicio en Docker (http://api-gateway:3000)
-const API_URL = process.env.API_URL || "http://api-gateway:3000";
+// Detectamos si estamos en el navegador o en el servidor (SSR)
+const isBrowser = typeof window !== "undefined";
+
+/** * MODIFICACIÓN CLAVE: 
+ * Si es el navegador, usamos localhost para que tu Chrome/Edge encuentre el Gateway.
+ * Si es el servidor, usamos api-gateway para que la red interna de Docker funcione.
+ */
+const API_URL = isBrowser 
+  ? "http://localhost:3000" 
+  : "http://api-gateway:3000";
 
 /**
- * Helper para manejar fetch con timeout y errores silenciosos.
- * Esto evita que el servidor SSR de Next.js se detenga si un microservicio falla.
+ * Helper para manejar fetch con headers dinámicos y errores controlados.
  */
-async function fetchConfig(url: string) {
+async function fetchConfig(url: string, method: string = "GET", body?: any, token?: string) {
   try {
+    const headers: HeadersInit = {
+      "Content-Type": "application/json",
+    };
+
+    // Si hay token, lo adjuntamos para que el Gateway valide la identidad
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
+    }
+
     const res = await fetch(url, { 
-      // Forzar comportamiento dinámico: no cache en SSR
+      method,
+      headers,
+      body: body ? JSON.stringify(body) : undefined,
       cache: "no-store"
     });
     
@@ -23,17 +41,24 @@ async function fetchConfig(url: string) {
   }
 }
 
+// --- FUNCIONES DE AUTENTICACIÓN ---
+export async function login(credentials: any) {
+  return await fetchConfig(`${API_URL}/api/login`, "POST", credentials);
+}
+
+export async function register(userData: any) {
+  return await fetchConfig(`${API_URL}/api/register`, "POST", userData);
+}
+
+// --- FUNCIONES DE PRODUCTOS ---
 export async function getProductos() {
   const data = await fetchConfig(`${API_URL}/api/products`);
-  // Retornamos un array vacío si falla para que el .map() en el componente no rompa la app
   return data || [];
 }
 
 export async function getProducto(id: number) {
   const productos = await getProductos();
   if (!productos || productos.length === 0) return null;
-  
-  // Buscamos el producto por ID. Nota: p.id puede venir como string o number según tu DB
   return productos.find((p: any) => String(p.id) === String(id)) || null;
 }
 
@@ -42,7 +67,23 @@ export async function getReseñas(productId: number) {
   return data || [];
 }
 
-export async function getOrdenes() {
-  const data = await fetchConfig(`${API_URL}/api/orders`);
+// --- FUNCIONES DE ÓRDENES Y CARRITO ---
+export async function getOrdenes(token: string) {
+  const data = await fetchConfig(`${API_URL}/api/orders`, "GET", null, token);
   return data || [];
+}
+
+// MODIFICACIÓN: Obtener el carrito persistente desde Postgres
+export async function getCart(token: string) {
+  return await fetchConfig(`${API_URL}/api/cart`, "GET", null, token);
+}
+
+// MODIFICACIÓN: Añadir o actualizar item en la base de datos
+export async function addToCart(productId: number, cantidad: number, token: string) {
+  return await fetchConfig(`${API_URL}/api/cart`, "POST", { product_id: productId, cantidad }, token);
+}
+
+// MODIFICACIÓN: Eliminar item de la base de datos
+export async function removeFromCart(productId: number, token: string) {
+  return await fetchConfig(`${API_URL}/api/cart/${productId}`, "DELETE", null, token);
 }

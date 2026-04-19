@@ -83,6 +83,8 @@ services:
       - "3001:3001"
     depends_on:
       - api-gateway
+    volumes:
+      - ./frontend-ssr/public/uploads:/app/public/uploads
     networks:
       - app-network
 
@@ -141,6 +143,29 @@ services:
     networks:
       - app-network
 
+  auth-service:
+    build: ./auth-service
+    container_name: auth-service
+    depends_on:
+      - auth-db
+    environment:
+      - PORT=8080
+    networks:
+      - app-network
+
+  auth-db:
+    image: postgres:15
+    container_name: auth_db_container
+    environment:
+      POSTGRES_USER: user_auth
+      POSTGRES_PASSWORD: password_segura
+      POSTGRES_DB: auth_db
+    volumes:
+      - ./auth-service/databaseComponent/init.sql:/docker-entrypoint-initdb.d/init.sql 
+      - auth_data:/var/lib/postgresql/data
+    networks:
+      - app-network
+
 networks:
   app-network:
 
@@ -150,3 +175,4 @@ volumes:
   reviews_data:
   rabbitmq_data:
   redis_data:
+  auth_data:

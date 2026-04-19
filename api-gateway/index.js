@@ -2,6 +2,8 @@ const express = require("express");
 const cors = require("cors");
 const axios = require("axios");
 const jwt = require("jsonwebtoken");
+const { connect: connectRabbit, publishVerificationRequested } = require("./rabbitmq");
+const { client: redis, connect: connectRedis } = require("./redis");
 
 const app = express();
 
@@ -85,12 +87,70 @@ app.post("/api/register", async (req, res) => {
   }
 });
 
+// ── LOGIN EN 2 PASOS ──────────────────────
+// Paso 1: valida credenciales con auth-service, genera código,
+//         lo guarda en Redis y publica un evento en RabbitMQ.
+//         NO devuelve el JWT todavía.
 app.post("/api/login", async (req, res) => {
   try {
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ error: "Email requerido" });
+
     const response = await axios.post(`${AUTH_SERVICE_URL}/login`, req.body);
-    res.json(response.data);
+    const { token } = response.data;
+    if (!token) return res.status(500).json({ error: "auth-service no devolvió token" });
+
+    const decoded = jwt.verify(token, SECRET_KEY);
+    const userId = decoded.userId || decoded.id;
+
+    const code = String(Math.floor(100000 + Math.random() * 900000));
+
+    await redis.set(
+      `auth:code:${userId}`,
+      JSON.stringify({ code, token, email }),
+      { EX: 300 }
+    );
+
+    publishVerificationRequested({ userId, email, code });
+
+    res.json({
+      message: "Código de verificación enviado al correo",
+      userId,
+    });
   } catch (error) {
-    res.status(error.response?.status || 401).json(error.response?.data || { error: "Error" });
+    if (error.response) {
+      return res.status(error.response.status).json(error.response.data);
+    }
+    console.error("Error /api/login:", error.message);
+    res.status(500).json({ error: "Error procesando login" });
+  }
+});
+
+// Paso 2: cliente envía {userId, code}. Si coincide con Redis,
+//         devuelve el JWT que se guardó en el paso 1 y borra la clave.
+app.post("/api/login/verify", async (req, res) => {
+  try {
+    const { userId, code } = req.body;
+    if (!userId || !code) {
+      return res.status(400).json({ error: "userId y code requeridos" });
+    }
+
+    const raw = await redis.get(`auth:code:${userId}`);
+    if (!raw) {
+      return res.status(401).json({ error: "Código expirado o inexistente" });
+    }
+
+    const stored = JSON.parse(raw);
+    if (stored.code !== String(code)) {
+      return res.status(401).json({ error: "Código incorrecto" });
+    }
+
+    await redis.del(`auth:code:${userId}`);
+
+    res.json({ token: stored.token, message: "Verificación exitosa" });
+  } catch (error) {
+    console.error("Error /api/login/verify:", error.message);
+    res.status(500).json({ error: "Error verificando código" });
   }
 });
 
@@ -154,6 +214,19 @@ app.get("/api/reviews/:product_id", async (req, res) => {
 module.exports = app;
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`API Gateway escuchando en puerto ${PORT}`);
-});
+
+async function start() {
+  try {
+    await connectRedis();
+  } catch (err) {
+    console.error("⚠️  Gateway: Redis no disponible al arrancar:", err.message);
+  }
+  if (process.env.RABBITMQ_URL) {
+    connectRabbit().catch(() => {});
+  }
+  app.listen(PORT, () => {
+    console.log(`API Gateway escuchando en puerto ${PORT}`);
+  });
+}
+
+start();

@@ -4,13 +4,19 @@ services:
     ports:
       - "3000:3000"
     environment:
-      - PRODUCT_SERVICE_URL=http://product-service:4000   
-      - ORDER_SERVICE_URL=http://order-service:5000        
-      - REVIEW_SERVICE_URL=http://review-service:6000      
+      - PRODUCT_SERVICE_URL=http://product-service:4000
+      - ORDER_SERVICE_URL=http://order-service:5000
+      - REVIEW_SERVICE_URL=http://review-service:6000
+      - AUTH_SERVICE_URL=http://auth-service:8080
+      - RABBITMQ_URL=amqp://admin:admin@rabbitmq:5672
+      - REDIS_URL=redis://redis:6379
     depends_on:
       - product-service
       - order-service
       - notification-service
+      - auth-service
+      - rabbitmq
+      - redis
     networks:
       - app-network
 

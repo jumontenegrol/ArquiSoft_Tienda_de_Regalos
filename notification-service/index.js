@@ -8,10 +8,14 @@ app.use(express.json());
 const RABBITMQ_URL = process.env.RABBITMQ_URL || "amqp://admin:admin@rabbitmq:5672";
 const REDIS_URL = process.env.REDIS_URL || "redis://redis:6379";
 
-const EXCHANGE = "orders.exchange";
-const EXCHANGE_TYPE = "direct";
-const QUEUE = "orders.notifications.queue";
-const ROUTING_KEY = "order.created";
+// ── Suscripciones (un consumer por evento) ─────────────
+const ORDERS_EXCHANGE = "orders.exchange";
+const ORDERS_QUEUE = "orders.notifications.queue";
+const ORDERS_ROUTING_KEY = "order.created";
+
+const AUTH_EXCHANGE = "auth.exchange";
+const AUTH_QUEUE = "auth.email.queue";
+const AUTH_ROUTING_KEY = "auth.verification.requested";
 
 const DEDUP_TTL_SECONDS = 60 * 60 * 24; // 24 horas
 
@@ -33,7 +37,7 @@ async function connectRedis() {
   }
 }
 
-// ── Procesar mensaje (con dedup en Redis) ──────────────
+// ── Handlers ───────────────────────────────────────────
 async function handleOrderCreated(data) {
   const orderId = data.orderId ?? data.order_id;
   if (orderId == null) {
@@ -42,9 +46,6 @@ async function handleOrderCreated(data) {
   }
 
   const dedupKey = `notif:${orderId}`;
-
-  // SET NX EX: solo se inserta si la clave no existe.
-  // Devuelve "OK" la primera vez y null si ya existía.
   const result = await redisClient.set(dedupKey, "1", {
     NX: true,
     EX: DEDUP_TTL_SECONDS,
@@ -66,7 +67,45 @@ async function handleOrderCreated(data) {
   });
 }
 
-// ── Consumidor RabbitMQ con reconexión ─────────────────
+async function handleVerificationRequested(data) {
+  const { userId, email, code } = data;
+  if (!userId || !email || !code) {
+    console.warn("⚠️  Mensaje de verificación incompleto, descartado:", data);
+    return;
+  }
+
+  console.log("📧 Email de verificación a enviar:");
+  console.log("──────────────────────────────────────────────");
+  console.log(`  Para:    ${email}`);
+  console.log(`  Asunto:  Tu código de verificación`);
+  console.log(`  Cuerpo:  Hola, tu código de acceso es ${code}.`);
+  console.log(`           Caduca en 5 minutos.`);
+  console.log(`  userId:  ${userId}`);
+  console.log("──────────────────────────────────────────────");
+}
+
+// ── Consumer factory: bindea una queue a su exchange y consume ──
+async function bindAndConsume(channel, { exchange, queue, routingKey, handler }) {
+  await channel.assertExchange(exchange, "direct", { durable: true });
+  await channel.assertQueue(queue, { durable: true });
+  await channel.bindQueue(queue, exchange, routingKey);
+
+  console.log(`✅ Escuchando ${queue} (exchange=${exchange}, key=${routingKey})`);
+
+  channel.consume(queue, async (msg) => {
+    if (!msg) return;
+    try {
+      const data = JSON.parse(msg.content.toString());
+      await handler(data);
+      channel.ack(msg);
+    } catch (err) {
+      console.error(`❌ Error procesando mensaje en ${queue}:`, err.message);
+      channel.nack(msg, false, false);
+    }
+  });
+}
+
+// ── Conexión RabbitMQ con reconexión ───────────────────
 async function startConsumer() {
   let connected = false;
   while (!connected) {
@@ -82,28 +121,23 @@ async function startConsumer() {
       });
 
       const channel = await conn.createChannel();
-      await channel.assertExchange(EXCHANGE, EXCHANGE_TYPE, { durable: true });
-      await channel.assertQueue(QUEUE, { durable: true });
-      await channel.bindQueue(QUEUE, EXCHANGE, ROUTING_KEY);
       await channel.prefetch(10);
 
-      console.log(
-        `✅ Consumer escuchando ${QUEUE} (exchange=${EXCHANGE}, key=${ROUTING_KEY})`
-      );
-      connected = true;
-
-      channel.consume(QUEUE, async (msg) => {
-        if (!msg) return;
-        try {
-          const data = JSON.parse(msg.content.toString());
-          await handleOrderCreated(data);
-          channel.ack(msg);
-        } catch (err) {
-          console.error("❌ Error procesando mensaje:", err.message);
-          // requeue=false → evita loop infinito si el mensaje está malformado
-          channel.nack(msg, false, false);
-        }
+      await bindAndConsume(channel, {
+        exchange: ORDERS_EXCHANGE,
+        queue: ORDERS_QUEUE,
+        routingKey: ORDERS_ROUTING_KEY,
+        handler: handleOrderCreated,
       });
+
+      await bindAndConsume(channel, {
+        exchange: AUTH_EXCHANGE,
+        queue: AUTH_QUEUE,
+        routingKey: AUTH_ROUTING_KEY,
+        handler: handleVerificationRequested,
+      });
+
+      connected = true;
     } catch (err) {
       console.log("⏳ Esperando RabbitMQ...", err.message);
       await new Promise(r => setTimeout(r, 3000));

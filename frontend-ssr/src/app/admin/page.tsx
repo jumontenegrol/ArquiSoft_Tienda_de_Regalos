@@ -2,6 +2,8 @@
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { showToast } from "../../components/Toast";
+import FormInput from "../../components/FormInput";
+import Button from "../../components/Button";
 // Use the auto bundle which registers required components automatically
 import Chart from "chart.js/auto";
 import { getCookie } from "cookies-next";
@@ -173,15 +175,13 @@ export default function AdminPage() {
         <div className="bg-white rounded-xl shadow p-4 sm:p-6 space-y-4">
           {["nombre", "descripcion", "imagen1", "imagen2", "imagen3"].map(campo => (
               campo === "descripcion" ? (
-                <textarea key={campo} placeholder="Descripción" rows={3} value={(form as any)[campo]}
-                  onChange={e => setForm(f => ({ ...f, [campo]: e.target.value }))}
-                  className="border border-gray-200 rounded-lg p-3 w-full bg-pink-50 focus:outline-none focus:border-yellow-400" />
+                <FormInput key={campo} textarea rows={3} placeholder="Descripción" value={(form as any)[campo]}
+                  onChange={e => setForm(f => ({ ...f, [campo]: e.target.value }))} />
               ) : (campo.startsWith("imagen") ? (
                 <div key={campo} className="space-y-2">
-                  <input placeholder={campo.charAt(0).toUpperCase() + campo.slice(1)}
+                  <FormInput placeholder={campo.charAt(0).toUpperCase() + campo.slice(1)}
                     value={(form as any)[campo]}
-                    onChange={e => setForm(f => ({ ...f, [campo]: e.target.value }))}
-                    className="border border-gray-200 rounded-lg p-3 w-full bg-pink-50 focus:outline-none focus:border-yellow-400" />
+                    onChange={e => setForm(f => ({ ...f, [campo]: e.target.value }))} />
                   <div className="flex items-center gap-2">
                     <input type="file" accept="image/*" onChange={(e) => handleFileChange(e as any, campo)}
                       className="text-sm" />
@@ -189,24 +189,20 @@ export default function AdminPage() {
                   </div>
                 </div>
               ) : (
-                <input key={campo} placeholder={campo.charAt(0).toUpperCase() + campo.slice(1)}
+                <FormInput key={campo} placeholder={campo.charAt(0).toUpperCase() + campo.slice(1)}
                   value={(form as any)[campo]}
-                  onChange={e => setForm(f => ({ ...f, [campo]: e.target.value }))}
-                  className="border border-gray-200 rounded-lg p-3 w-full bg-pink-50 focus:outline-none focus:border-yellow-400" />
+                  onChange={e => setForm(f => ({ ...f, [campo]: e.target.value }))} />
               ))
           ))}
           <div className="grid grid-cols-2 gap-4">
-            <input type="number" placeholder="Precio" value={form.precio}
-              onChange={e => setForm(f => ({ ...f, precio: e.target.value }))}
-              className="border border-gray-200 rounded-lg p-3 w-full bg-pink-50 focus:outline-none focus:border-yellow-400" />
-            <input type="number" placeholder="Stock" value={form.stock}
-              onChange={e => setForm(f => ({ ...f, stock: e.target.value }))}
-              className="border border-gray-200 rounded-lg p-3 w-full bg-pink-50 focus:outline-none focus:border-yellow-400" />
+            <FormInput type="number" placeholder="Precio" value={form.precio}
+              onChange={e => setForm(f => ({ ...f, precio: e.target.value }))} />
+            <FormInput type="number" placeholder="Stock" value={form.stock}
+              onChange={e => setForm(f => ({ ...f, stock: e.target.value }))} />
           </div>
-          <button onClick={crearProducto}
-            className="w-full bg-yellow-400 hover:bg-yellow-500 text-white font-semibold py-3 rounded-xl shadow transition">
+          <Button onClick={crearProducto} className="w-full bg-yellow-400 hover:bg-yellow-500 py-3">
             Crear producto ✨
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -224,14 +220,12 @@ export default function AdminPage() {
                 </p>
               </div>
               <div className="flex gap-2 flex-wrap">
-                <button onClick={() => cambiarPrecio(p.id)}
-                  className="bg-yellow-400 hover:bg-yellow-500 text-white px-3 py-1 rounded-lg text-sm">
+                <Button onClick={() => cambiarPrecio(p.id)} className="bg-yellow-400 hover:bg-yellow-500 px-3 py-1 text-sm">
                   Editar precio
-                </button>
-                <button onClick={() => eliminarProducto(p.id)}
-                  className="bg-red-400 hover:bg-red-500 text-white px-3 py-1 rounded-lg text-sm">
+                </Button>
+                <Button onClick={() => eliminarProducto(p.id)} className="bg-red-400 hover:bg-red-500 px-3 py-1 text-sm">
                   Eliminar
-                </button>
+                </Button>
               </div>
             </div>
           ))}

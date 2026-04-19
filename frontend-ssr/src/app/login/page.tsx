@@ -2,6 +2,9 @@
 import { useState } from "react";
 import { setCookie } from "cookies-next";
 import { useRouter } from "next/navigation";
+import { showToast } from "../../components/Toast";
+import FormInput from "../../components/FormInput";
+import Button from "../../components/Button";
 
 export default function LoginPage() {
   const [isRegister, setIsRegister] = useState(false);
@@ -27,11 +30,11 @@ export default function LoginPage() {
         router.push("/");
         router.refresh();
       } else {
-        alert("Usuario creado. Ahora puedes iniciar sesión.");
+        showToast("Usuario creado. Ahora puedes iniciar sesión.", "success");
         setIsRegister(false);
       }
     } else {
-      alert(data.error || "Error en la operación");
+      showToast(data.error || "Error en la operación", "error");
     }
   };
 
@@ -41,21 +44,17 @@ export default function LoginPage() {
         {isRegister ? "Crear Cuenta" : "Iniciar Sesión"}
       </h2>
       <form onSubmit={handleSubmit} className="space-y-4">
-        {isRegister && (
-          <input className="w-full p-3 border rounded-lg bg-pink-50" placeholder="Nombre de Usuario"
-            onChange={e => setForm({...form, username: e.target.value})} required />
-        )}
-        <input className="w-full p-3 border rounded-lg bg-pink-50" type="email" placeholder="Email"
-          onChange={e => setForm({...form, email: e.target.value})} required />
-        <input className="w-full p-3 border rounded-lg bg-pink-50" type="password" placeholder="Contraseña"
-          onChange={e => setForm({...form, password: e.target.value})} required />
-        {isRegister && (
-          <input className="w-full p-3 border rounded-lg bg-pink-50" type="password" placeholder="Confirmar Contraseña"
-            onChange={e => setForm({...form, confirm_password: e.target.value})} required />
-        )}
-        <button className="w-full bg-yellow-400 text-white py-3 rounded-lg font-bold hover:bg-yellow-500 transition">
-          {isRegister ? "Registrarme ✨" : "Ingresar 🚀"}
-        </button>
+          {isRegister && (
+            <FormInput placeholder="Nombre de Usuario" onChange={e => setForm({...form, username: e.target.value})} required />
+          )}
+          <FormInput type="email" placeholder="Email" onChange={e => setForm({...form, email: e.target.value})} required />
+          <FormInput type="password" placeholder="Contraseña" onChange={e => setForm({...form, password: e.target.value})} required />
+          {isRegister && (
+            <FormInput type="password" placeholder="Confirmar Contraseña" onChange={e => setForm({...form, confirm_password: e.target.value})} required />
+          )}
+          <Button type="submit" className="w-full bg-yellow-400 py-3 rounded-lg hover:bg-yellow-500">
+            {isRegister ? "Registrarme ✨" : "Ingresar 🚀"}
+          </Button>
       </form>
       <button onClick={() => setIsRegister(!isRegister)} className="w-full mt-4 text-sm text-gray-500 underline">
         {isRegister ? "¿Ya tienes cuenta? Ingresa aquí" : "¿No tienes cuenta? Regístrate"}

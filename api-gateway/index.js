@@ -142,6 +142,17 @@ app.post("/api/orders", verifyToken, async (req, res) => {
   }
 });
 
+app.get("/api/orders", verifyToken, async (req, res) => {
+  try {
+    // Redirigimos la petición al microservicio de órdenes (Puerto 5000)
+    const response = await axios.get(`${ORDER_SERVICE_URL}/orders`);
+    res.json(response.data);
+  } catch (error) {
+    console.error("Error al obtener órdenes del microservicio:", error.message);
+    res.status(500).json({ error: "Error obteniendo pedidos" });
+  }
+});
+
 app.get("/api/reviews/:product_id", async (req, res) => {
   try {
     const response = await axios.get(`${REVIEW_SERVICE_URL}/reviews/${req.params.product_id}`);

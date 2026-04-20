@@ -122,6 +122,12 @@ services:
     environment:
       - RABBITMQ_URL=amqp://admin:admin@rabbitmq:5672
       - REDIS_URL=redis://redis:6379
+      # SMTP: si están vacías, notification-service cae a MOCK (console.log)
+      - SMTP_HOST=${SMTP_HOST:-}
+      - SMTP_PORT=${SMTP_PORT:-587}
+      - SMTP_USER=${SMTP_USER:-}
+      - SMTP_PASS=${SMTP_PASS:-}
+      - SMTP_FROM=${SMTP_FROM:-}
     networks:
       - app-network
 

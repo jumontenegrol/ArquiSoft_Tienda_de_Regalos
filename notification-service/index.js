@@ -1,6 +1,7 @@
 const amqp = require("amqplib");
 const { createClient } = require("redis");
 const express = require("express");
+const nodemailer = require("nodemailer");
 
 const app = express();
 app.use(express.json());
@@ -18,6 +19,28 @@ const AUTH_QUEUE = "auth.email.queue";
 const AUTH_ROUTING_KEY = "auth.verification.requested";
 
 const DEDUP_TTL_SECONDS = 60 * 60 * 24; // 24 horas
+
+// ── SMTP (opcional; si no hay credenciales, cae a console.log) ─
+const SMTP_HOST = process.env.SMTP_HOST;
+const SMTP_PORT = parseInt(process.env.SMTP_PORT || "587", 10);
+const SMTP_USER = process.env.SMTP_USER;
+const SMTP_PASS = process.env.SMTP_PASS;
+const SMTP_FROM = process.env.SMTP_FROM || SMTP_USER;
+
+const mailer = SMTP_HOST && SMTP_USER && SMTP_PASS
+  ? nodemailer.createTransport({
+      host: SMTP_HOST,
+      port: SMTP_PORT,
+      secure: SMTP_PORT === 465,
+      auth: { user: SMTP_USER, pass: SMTP_PASS },
+    })
+  : null;
+
+if (mailer) {
+  console.log(`✉️  SMTP activo (${SMTP_HOST}:${SMTP_PORT}, from ${SMTP_FROM})`);
+} else {
+  console.log("ℹ️  SMTP no configurado: los correos se imprimirán en consola.");
+}
 
 // ── Cliente Redis ──────────────────────────────────────
 const redisClient = createClient({ url: REDIS_URL });
@@ -74,14 +97,28 @@ async function handleVerificationRequested(data) {
     return;
   }
 
-  console.log("📧 Email de verificación a enviar:");
-  console.log("──────────────────────────────────────────────");
-  console.log(`  Para:    ${email}`);
-  console.log(`  Asunto:  Tu código de verificación`);
-  console.log(`  Cuerpo:  Hola, tu código de acceso es ${code}.`);
-  console.log(`           Caduca en 5 minutos.`);
-  console.log(`  userId:  ${userId}`);
-  console.log("──────────────────────────────────────────────");
+  const subject = "Tu código de verificación";
+  const text =
+    `Hola,\n\nTu código de acceso es ${code}.\n` +
+    `Caduca en 5 minutos.\n\nTienda de Regalos.`;
+
+  if (mailer) {
+    try {
+      const info = await mailer.sendMail({
+        from: SMTP_FROM,
+        to: email,
+        subject,
+        text,
+      });
+      console.log(`✅ Correo enviado a ${email} (messageId=${info.messageId})`);
+    } catch (err) {
+      console.error(`❌ Error enviando correo a ${email}:`, err.message);
+      throw err; // dispara nack para reintento
+    }
+  } else {
+    console.log("📧 [MOCK] Email de verificación:");
+    console.log(`  Para: ${email} | Código: ${code} | userId: ${userId}`);
+  }
 }
 
 // ── Consumer factory: bindea una queue a su exchange y consume ──

@@ -146,6 +146,12 @@ app.post("/api/orders", verifyToken, async (req, res) => {
   }
 });
 
+app.post("/api/reviews", async (req, res) => {
+  try {
+    const response = await axios.post(`${REVIEW_SERVICE_URL}/reviews`, req.body);
+    res.json(response.data);
+  } catch (error) {
+    res.status(500).json({ error: "Error creando reseña" });
 app.get("/api/orders", verifyToken, async (req, res) => {
   try {
     // Redirigimos la petición al microservicio de órdenes (Puerto 5000)

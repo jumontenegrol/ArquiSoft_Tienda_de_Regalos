@@ -53,24 +53,56 @@ export default function ProductoClient({ producto, reseñasIniciales }: { produc
       return;
     }
     try {
-      await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000"}/api/reviews`, {
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
+      
+      // 1. Enviar la reseña
+      const postRes = await fetch(`${API_URL}/api/reviews`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ product_id: producto.id, autor, comentario, estrellas }),
       });
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000"}/api/reviews/${producto.id}`);
-      setReseñas(await res.json());
-      setAutor(""); setComentario(""); setEstrellas(0);
+
+      if (!postRes.ok) {
+        const errorData = await postRes.json();
+        throw new Error(errorData.error || "Error al guardar reseña");
+      }
+
+      // 2. Esperar un poco para asegurar persistencia en MongoDB
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      // 3. Obtener reseñas actualizadas
+      const getRes = await fetch(`${API_URL}/api/reviews/${producto.id}`);
+      
+      if (!getRes.ok) {
+        throw new Error("Error al cargar reseñas actualizadas");
+      }
+
+      const reseñasActualizadas = await getRes.json();
+      
+      // Validar que sea un array
+      if (Array.isArray(reseñasActualizadas)) {
+        setReseñas(reseñasActualizadas);
+      } else {
+        console.warn("Respuesta inesperada de reseñas:", reseñasActualizadas);
+        setReseñas([]);
+      }
+
+      // 4. Limpiar formulario
+      setAutor(""); 
+      setComentario(""); 
+      setEstrellas(0);
+      
       showToast("¡Reseña enviada, gracias! 🌟", "success");
-    } catch {
-      showToast("Error enviando reseña", "error");
+    } catch (error) {
+      console.error("Error en enviarReseña:", error);
+      showToast(error instanceof Error ? error.message : "Error enviando reseña", "error");
     }
   }
 
   return (
     <main className="max-w-5xl mx-auto p-4 sm:p-6 md:p-8">
       <Link href="/"
-        className="inline-flex items-center justify-center gap-2 fixed top-6 left-6 bg-yellow-400 hover:bg-yellow-500 text-white p-3 rounded-lg shadow-elevation-2 z-10 transition-all">
+        className="inline-flex items-center justify-center gap-2 fixed top-0 left-6 bg-yellow-400 hover:bg-yellow-500 text-white p-3 rounded-lg shadow-elevation-2 z-10 transition-all">
         ← Volver
       </Link>
 

@@ -15,7 +15,7 @@ CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
 INSERT INTO users (username, email, password_hash, role)
 VALUES (
     'admin_root', 
-    'admin@sistema.com', 
+    'juanda.gonzalezs10@gmail.com', 
     '$2a$12$tp/Vj6lVLOge3nxZquVtweg3UPg1aCYIFzecJq4LM3nFOgcaQ.Cbm', 
     1
 ) 

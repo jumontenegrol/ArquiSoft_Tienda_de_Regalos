@@ -45,7 +45,8 @@ app.get("/", (req, res) => {
 });
 
 // ── RUTAS DEL CARRITO ──────────────────────
-app.get("/api/cart", verifyToken, async (req, res) => {
+//app.get("/api/cart", verifyToken, async (req, res) => {
+app.get("/api/cart",  async (req, res) => {
   try {
     const userId = req.user.userId || req.user.id;
     const response = await axios.get(`${ORDER_SERVICE_URL}/cart`, {
@@ -56,8 +57,8 @@ app.get("/api/cart", verifyToken, async (req, res) => {
     res.status(500).json({ error: "Error al obtener el carrito" });
   }
 });
-
-app.post("/api/cart", verifyToken, async (req, res) => {
+//app.post("/api/cart", verifyToken, async (req, res) => {
+app.post("/api/cart", async (req, res) => {
   try {
     const userId = req.user.userId || req.user.id;
     const response = await axios.post(`${ORDER_SERVICE_URL}/cart`, req.body, {
@@ -69,7 +70,8 @@ app.post("/api/cart", verifyToken, async (req, res) => {
   }
 });
 
-app.delete("/api/cart/:id", verifyToken, async (req, res) => {
+//app.delete("/api/cart/:id", verifyToken, async (req, res) => {
+app.delete("/api/cart/:id", async (req, res) => {
   try {
     const userId = req.user.userId || req.user.id;
     const response = await axios.delete(`${ORDER_SERVICE_URL}/cart/${req.params.id}`, {
@@ -168,7 +170,8 @@ app.get("/api/products", async (req, res) => {
   }
 });
 
-app.post("/api/products", verifyToken, async (req, res) => {
+//app.post("/api/products", verifyToken, async (req, res) => {
+app.post("/api/products", async (req, res) => {
   try {
     const response = await axios.post(`${PRODUCT_SERVICE_URL}/products`, req.body);
     res.json(response.data);
@@ -177,7 +180,8 @@ app.post("/api/products", verifyToken, async (req, res) => {
   }
 });
 
-app.put("/api/products/:id", verifyToken, async (req, res) => {
+//app.put("/api/products/:id", verifyToken, async (req, res) => {
+app.put("/api/products/:id", async (req, res) => {
   try {
     const response = await axios.put(`${PRODUCT_SERVICE_URL}/products/${req.params.id}`, req.body);
     res.json(response.data);
@@ -186,7 +190,9 @@ app.put("/api/products/:id", verifyToken, async (req, res) => {
   }
 });
 
-app.delete("/api/products/:id", verifyToken, async (req, res) => {
+
+//app.delete("/api/products/:id", verifyToken, async (req, res) => {
+app.delete("/api/products/:id", async (req, res) => {
   try {
     const response = await axios.delete(`${PRODUCT_SERVICE_URL}/products/${req.params.id}`);
     res.json(response.data);
@@ -196,7 +202,9 @@ app.delete("/api/products/:id", verifyToken, async (req, res) => {
 });
 
 // ── ÓRDENES Y RESEÑAS ──────────────────────
-app.post("/api/orders", verifyToken, async (req, res) => {
+
+//app.post("/api/orders", verifyToken, async (req, res) => {
+app.post("/api/orders", async (req, res) => {
   try {
     const orderWithUser = { ...req.body, customerId: req.user.userId || req.user.id };
     const response = await axios.post(`${ORDER_SERVICE_URL}/orders`, orderWithUser);
@@ -212,7 +220,11 @@ app.post("/api/reviews", async (req, res) => {
     res.json(response.data);
   } catch (error) {
     res.status(500).json({ error: "Error creando reseña" });
-app.get("/api/orders", verifyToken, async (req, res) => {
+  }
+});
+
+//app.get("/api/orders", verifyToken, async (req, res) => {
+app.get("/api/orders", async (req, res) => {
   try {
     // Redirigimos la petición al microservicio de órdenes (Puerto 5000)
     const response = await axios.get(`${ORDER_SERVICE_URL}/orders`);

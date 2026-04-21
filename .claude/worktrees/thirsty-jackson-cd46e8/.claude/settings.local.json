@@ -1,0 +1,30 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(curl.exe -X POST http://localhost:3000/api/login -H \"Content-Type: application/json\" -d '{\\\\\"email\\\\\":\\\\\"jgonzalezsi@unal.edu.co\\\\\",\\\\\"password\\\\\":\\\\\"12345\\\\\"}')",
+      "PowerShell(docker compose logs --tail=30 notification-service)",
+      "PowerShell(curl.exe -X POST http://localhost:3000/api/login/verify -H \"Content-Type: application/json\" -d '{\\\\\"userId\\\\\":\\\\\"4\\\\\",\\\\\"code\\\\\":\\\\\"454865\\\\\"}')",
+      "PowerShell(docker compose logs notification-service --tail=20)",
+      "PowerShell(docker compose logs notification-service --tail=15)",
+      "PowerShell(curl.exe -X POST http://localhost:3000/api/login/verify -H \"Content-Type: application/json\" -d '{\\\\\"userId\\\\\":\\\\\"4\\\\\",\\\\\"code\\\\\":\\\\\"610955\\\\\"}')",
+      "PowerShell(gh --version)",
+      "PowerShell(gh auth status)",
+      "PowerShell(Set-Location C:\\\\Users\\\\HP\\\\Documents\\\\ArquiSoft_Tienda_de_Regalos; git diff 45ceb27 origin/main -- api-gateway/index.js)",
+      "PowerShell(Set-Location C:\\\\Users\\\\HP\\\\Documents\\\\ArquiSoft_Tienda_de_Regalos; $base = git merge-base origin/main origin/juan-daniel; Write-Host \"base commit: $base\"; Write-Host \"---\"; $result = git merge-tree $base origin/main origin/juan-daniel 2>&1; if \\($result -match \"<<<<<<<\"\\) { Write-Host \"HAY CONFLICTO. Detalle:\"; $result | Select-String -Pattern \"<<<<<<<|=======|>>>>>>>\" -Context 3,3 } else { Write-Host \"Merge LIMPIO. Sin conflictos.\" })",
+      "PowerShell($response = curl.exe -s -o $null -w \"%{http_code}\" http://localhost:3001/login; Write-Host \"GET /login -> HTTP $response\"; Start-Sleep -Seconds 2; Write-Host \"\"; Write-Host \"--- logs despues del request ---\"; docker compose logs frontend-ssr --tail=15)",
+      "PowerShell(try { $r = Invoke-WebRequest -Uri http://localhost:3001/login -UseBasicParsing -TimeoutSec 20; Write-Host \"HTTP $\\($r.StatusCode\\) - OK, pagina compila\"; Write-Host \"Content length: $\\($r.Content.Length\\) bytes\" } catch { Write-Host \"ERROR: $\\($_.Exception.Message\\)\" }; Start-Sleep -Seconds 2; Write-Host \"\"; Write-Host \"--- logs frontend-ssr ---\"; docker compose logs frontend-ssr --tail=20)",
+      "PowerShell(Write-Host \"--- Probando con 90s de timeout \\(Next.js dev mode compila en primer request\\) ---\"; try { $r = Invoke-WebRequest -Uri http://localhost:3001/login -UseBasicParsing -TimeoutSec 90; Write-Host \"HTTP $\\($r.StatusCode\\) en $\\([math]::Round\\($r.RawContentLength/1024,1\\)\\) KB\" } catch { Write-Host \"ERROR: $\\($_.Exception.Message\\)\" }; Start-Sleep -Seconds 2; Write-Host \"\"; Write-Host \"--- logs ---\"; docker compose logs frontend-ssr --tail=30)",
+      "PowerShell(Set-Location C:\\\\Users\\\\HP\\\\Documents\\\\ArquiSoft_Tienda_de_Regalos; docker run --rm -v ${PWD}/api-gateway:/app -w /app node:18-alpine node --check index.js 2>&1; if \\($LASTEXITCODE -eq 0\\) { Write-Host \"SINTAXIS OK\" } else { Write-Host \"HAY ERROR\" })",
+      "PowerShell(curl.exe -s http://localhost:3000/)",
+      "PowerShell(curl.exe -s -X POST http://localhost:3000/api/login -H \"Content-Type: application/json\" -d '{\\\\\"email\\\\\":\\\\\"jgonzalezsi@unal.edu.co\\\\\",\\\\\"password\\\\\":\\\\\"12345\\\\\"}')",
+      "PowerShell(Start-Sleep -Seconds 5; Write-Host \"--- logs mas recientes ---\"; docker compose logs api-gateway --tail=10; Write-Host \"\"; Write-Host \"--- prueba con Invoke-WebRequest ---\"; try { $r = Invoke-WebRequest -Uri http://localhost:3000/ -UseBasicParsing -TimeoutSec 15; Write-Host \"HTTP $\\($r.StatusCode\\): $\\($r.Content\\)\" } catch { Write-Host \"ERROR: $\\($_.Exception.Message\\)\" })",
+      "PowerShell(docker compose exec api-gateway wget -qO- http://localhost:3000/ 2>&1)",
+      "PowerShell(docker compose port api-gateway 3000)",
+      "PowerShell(Get-NetTCPConnection -LocalPort 3000 -ErrorAction SilentlyContinue)",
+      "PowerShell(docker compose ps --all)",
+      "PowerShell(curl.exe -s -m 8 http://127.0.0.1:3000/)",
+      "PowerShell(Stop-Process -Id 4212 -Force -ErrorAction SilentlyContinue)",
+      "PowerShell(curl.exe -s -m 8 http://localhost:3000/)"
+    ]
+  }
+}

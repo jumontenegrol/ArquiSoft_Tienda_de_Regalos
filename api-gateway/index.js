@@ -212,6 +212,9 @@ app.post("/api/reviews", async (req, res) => {
     res.json(response.data);
   } catch (error) {
     res.status(500).json({ error: "Error creando reseña" });
+  }
+});
+
 app.get("/api/orders", verifyToken, async (req, res) => {
   try {
     // Redirigimos la petición al microservicio de órdenes (Puerto 5000)

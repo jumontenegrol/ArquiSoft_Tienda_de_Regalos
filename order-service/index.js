@@ -6,26 +6,25 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// ── Pool: Vercel usa DATABASE_URL, local usa credenciales directas ──
+const IS_VERCEL = !!process.env.DATABASE_URL;
+
 const pool = new Pool(
-  process.env.DATABASE_URL
+  IS_VERCEL
     ? {
         connectionString: process.env.DATABASE_URL,
-        ssl: process.env.NODE_ENV === "production"
-          ? { rejectUnauthorized: false }
-          : false,
+        ssl: { rejectUnauthorized: false },
+        connectionTimeoutMillis: 5000,
       }
     : {
-        host: process.env.DB_HOST || "orders-postgres",
-        user: process.env.DB_USER || "admin",
-        password: process.env.DB_PASSWORD || "admin",
-        database: process.env.DB_NAME || "ordersdb",
-        port: process.env.DB_PORT || 5432,
+        host: "orders-postgres",
+        user: "admin",
+        password: "admin",
+        database: "ordersdb",
+        port: 5432,
       }
 );
 
-
-// ── RabbitMQ: solo en local (Docker), ignorado en Vercel ──
+// ── RabbitMQ: solo en local ────────────────────────────
 const RABBITMQ_URL = process.env.RABBITMQ_URL || null;
 const QUEUE = "orders_queue";
 let rabbitChannel = null;
@@ -47,8 +46,9 @@ async function connectRabbitMQ() {
   }
 }
 
-// ── Esperar PostgreSQL ─────────────────────────────────
+// ── Esperar PostgreSQL (solo local) ───────────────────
 async function waitForDB() {
+  if (IS_VERCEL) return; // ✅ En Vercel no esperar
   let connected = false;
   while (!connected) {
     try {
@@ -64,7 +64,6 @@ async function waitForDB() {
 
 // ── Inicializar tablas ─────────────────────────────────
 async function initDB() {
-  await waitForDB();
   try {
     await pool.query(`
       CREATE TABLE IF NOT EXISTS orders (
@@ -73,7 +72,6 @@ async function initDB() {
         total INTEGER
       );
     `);
-
     await pool.query(`
       CREATE TABLE IF NOT EXISTS order_items (
         id SERIAL PRIMARY KEY,
@@ -83,8 +81,6 @@ async function initDB() {
         precio_unitario INTEGER
       );
     `);
-
-    //Nueva tabla para el Carrito Persistente
     await pool.query(`
       CREATE TABLE IF NOT EXISTS cart_items (
         id SERIAL PRIMARY KEY,
@@ -92,30 +88,28 @@ async function initDB() {
         product_id INTEGER NOT NULL,
         cantidad INTEGER DEFAULT 1,
         fecha_agregado TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE(user_id, product_id) -- Evita duplicados, permite sumar cantidad
+        UNIQUE(user_id, product_id)
       );
     `);
-
     console.log("✅ Tablas de orders listas");
   } catch (error) {
     console.error("Error creando tablas:", error.message);
   }
 }
 
-
-// ── Arranque (solo en local, no bloquea Vercel) ────────
+// ── Arranque ───────────────────────────────────────────
 async function start() {
+  await waitForDB();
   await connectRabbitMQ();
   await initDB();
 }
 
 start();
 
-// Obtener el carrito de un usuario específico mediante x-user-id (enviado por el Gateway)
+// ── Carrito ────────────────────────────────────────────
 app.get("/cart", async (req, res) => {
-  const userId = req.headers["x-user-id"]; 
+  const userId = req.headers["x-user-id"];
   if (!userId) return res.status(401).json({ error: "No autenticado" });
-
   try {
     const result = await pool.query(
       "SELECT * FROM cart_items WHERE user_id = $1 ORDER BY fecha_agregado DESC",
@@ -127,18 +121,15 @@ app.get("/cart", async (req, res) => {
   }
 });
 
-// Añadir productos al carrito con lógica de actualización si ya existen (Upsert)
 app.post("/cart", async (req, res) => {
   const userId = req.headers["x-user-id"];
   const { product_id, cantidad } = req.body;
-
   if (!userId) return res.status(401).json({ error: "No autenticado" });
-
   try {
     await pool.query(
       `INSERT INTO cart_items (user_id, product_id, cantidad)
        VALUES ($1, $2, $3)
-       ON CONFLICT (user_id, product_id) 
+       ON CONFLICT (user_id, product_id)
        DO UPDATE SET cantidad = cart_items.cantidad + EXCLUDED.cantidad`,
       [userId, product_id, cantidad || 1]
     );
@@ -148,13 +139,10 @@ app.post("/cart", async (req, res) => {
   }
 });
 
-// Eliminar un producto específico del carrito del usuario
 app.delete("/cart/:productId", async (req, res) => {
   const userId = req.headers["x-user-id"];
   const { productId } = req.params;
-
   if (!userId) return res.status(401).json({ error: "No autenticado" });
-
   try {
     await pool.query(
       "DELETE FROM cart_items WHERE user_id = $1 AND product_id = $2",
@@ -166,8 +154,7 @@ app.delete("/cart/:productId", async (req, res) => {
   }
 });
 
-
-// ── Crear orden ────────────────────────────────────────
+// ── Órdenes ────────────────────────────────────────────
 app.post("/orders", async (req, res) => {
   const { items } = req.body;
   if (!items || items.length === 0) {
@@ -191,7 +178,6 @@ app.post("/orders", async (req, res) => {
       );
     }
 
-    // ✅ Publicar en RabbitMQ solo si está disponible (local)
     if (rabbitChannel) {
       rabbitChannel.sendToQueue(
         QUEUE,
@@ -208,7 +194,6 @@ app.post("/orders", async (req, res) => {
   }
 });
 
-// ── Obtener órdenes ────────────────────────────────────
 app.get("/orders", async (req, res) => {
   try {
     await initDB();
@@ -222,7 +207,8 @@ app.get("/orders", async (req, res) => {
 });
 
 module.exports = app;
+
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
-  console.log(`Product service listening on port ${PORT}`);
+  console.log(`🚀 Order Service en puerto ${PORT}`);
 });

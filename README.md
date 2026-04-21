@@ -207,18 +207,7 @@ docker-compose up --build
 ```
 
 
-**Step 2 — Access the application**
-
-Once all services are running, open a browser and navigate to the following URLs:
-
-| View | URL |
-|------|-----|
-
-
-**Step 3 — Insert sample products (optional)**
-
-
-**Step 4 — Stop the system**
+**Step 2 — Stop the system**
 
 To stop all running containers:
 

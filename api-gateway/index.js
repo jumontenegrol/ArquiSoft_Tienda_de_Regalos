@@ -6,7 +6,11 @@ const jwt = require("jsonwebtoken");
 const app = express();
 
 app.use(cors({
-  origin: "http://localhost:3001", 
+  origin: [
+    "http://localhost:8080",
+    "http://localhost:3001",
+    "https://tienda-regalos-frontend.vercel.app"
+  ], 
   credentials: true
 }));
 app.use(express.json());

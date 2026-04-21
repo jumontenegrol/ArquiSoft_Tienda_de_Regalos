@@ -102,7 +102,7 @@ export default function ProductoClient({ producto, reseñasIniciales }: { produc
   return (
     <main className="max-w-5xl mx-auto p-4 sm:p-6 md:p-8">
       <Link href="/"
-        className="inline-flex items-center justify-center gap-2 fixed top-6 left-6 bg-yellow-400 hover:bg-yellow-500 text-white p-3 rounded-lg shadow-elevation-2 z-10 transition-all">
+        className="inline-flex items-center justify-center gap-2 fixed top-0 left-6 bg-yellow-400 hover:bg-yellow-500 text-white p-3 rounded-lg shadow-elevation-2 z-10 transition-all">
         ← Volver
       </Link>
 

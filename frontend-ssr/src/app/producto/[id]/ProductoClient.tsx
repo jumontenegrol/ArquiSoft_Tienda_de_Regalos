@@ -53,87 +53,204 @@ export default function ProductoClient({ producto, reseñasIniciales }: { produc
       return;
     }
     try {
-      await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000"}/api/reviews`, {
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
+      
+      // 1. Enviar la reseña
+      const postRes = await fetch(`${API_URL}/api/reviews`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ product_id: producto.id, autor, comentario, estrellas }),
       });
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000"}/api/reviews/${producto.id}`);
-      setReseñas(await res.json());
-      setAutor(""); setComentario(""); setEstrellas(0);
+
+      if (!postRes.ok) {
+        const errorData = await postRes.json();
+        throw new Error(errorData.error || "Error al guardar reseña");
+      }
+
+      // 2. Esperar un poco para asegurar persistencia en MongoDB
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      // 3. Obtener reseñas actualizadas
+      const getRes = await fetch(`${API_URL}/api/reviews/${producto.id}`);
+      
+      if (!getRes.ok) {
+        throw new Error("Error al cargar reseñas actualizadas");
+      }
+
+      const reseñasActualizadas = await getRes.json();
+      
+      // Validar que sea un array
+      if (Array.isArray(reseñasActualizadas)) {
+        setReseñas(reseñasActualizadas);
+      } else {
+        console.warn("Respuesta inesperada de reseñas:", reseñasActualizadas);
+        setReseñas([]);
+      }
+
+      // 4. Limpiar formulario
+      setAutor(""); 
+      setComentario(""); 
+      setEstrellas(0);
+      
       showToast("¡Reseña enviada, gracias! 🌟", "success");
-    } catch {
-      showToast("Error enviando reseña", "error");
+    } catch (error) {
+      console.error("Error en enviarReseña:", error);
+      showToast(error instanceof Error ? error.message : "Error enviando reseña", "error");
     }
   }
 
   return (
-    <main className="max-w-4xl mx-auto p-4 sm:p-6">
+    <main className="max-w-5xl mx-auto p-4 sm:p-6 md:p-8">
       <Link href="/"
-        className="fixed top-4 left-4 bg-yellow-400 hover:bg-yellow-500 text-white p-3 rounded-full shadow-lg z-10">
-        ←
+        className="inline-flex items-center justify-center gap-2 fixed top-0 left-6 bg-yellow-400 hover:bg-yellow-500 text-white p-3 rounded-lg shadow-elevation-2 z-10 transition-all">
+        ← Volver
       </Link>
 
       {/* Producto */}
-      <div className="bg-white shadow-lg rounded-xl p-4 sm:p-6">
-        <h2 className="text-2xl sm:text-3xl font-bold text-yellow-500 mb-4">{producto.nombre}</h2>
-        <div className="flex flex-wrap gap-4 justify-center mb-6">
-          {imagenes.map((img: string, i: number) => (
-            <img key={i} src={img} alt={producto.nombre}
-              className="w-full sm:w-1/3 object-cover rounded-lg shadow-md hover:scale-105 transition cursor-pointer"
-              onClick={() => setModalImg(img)} />
-          ))}
+      <div className="bg-white shadow-elevation-2 rounded-2xl p-6 md:p-8 border border-gray-100 mt-8">
+        <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-2">{producto.nombre}</h2>
+        <p className="text-gray-600 mb-8 text-lg">{producto.descripcion}</p>
+
+        {/* Galería de imágenes */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+          <div className="md:col-span-2">
+            <div className="bg-gray-100 rounded-xl overflow-hidden h-80 md:h-96 flex items-center justify-center">
+              {imagenes.length > 0 ? (
+                <img 
+                  src={imagenes[0]} 
+                  alt={producto.nombre}
+                  className="w-full h-full object-cover hover:scale-110 transition-transform duration-500 cursor-pointer"
+                  onClick={() => setModalImg(imagenes[0])} 
+                />
+              ) : (
+                <p className="text-gray-400">Sin imagen</p>
+              )}
+            </div>
+          </div>
+
+          {/* Thumbnails */}
+          <div className="space-y-3">
+            {imagenes.map((img: string, i: number) => (
+              <div
+                key={i}
+                onClick={() => setModalImg(img)}
+                className="w-full aspect-square rounded-lg overflow-hidden shadow-elevation-1 hover:shadow-elevation-2 cursor-pointer transition-all hover:scale-105"
+              >
+                <img 
+                  src={img} 
+                  alt={`${producto.nombre} ${i + 1}`}
+                  className="w-full h-full object-cover"
+                />
+              </div>
+            ))}
+          </div>
         </div>
-        <p className="text-gray-700 mb-4">{producto.descripcion}</p>
-        <p className="text-2xl font-bold mb-6">${producto.precio}</p>
-        <button onClick={agregarAlCarrito}
-          className="w-full sm:w-auto bg-yellow-400 hover:bg-yellow-500 text-white font-semibold py-3 px-6 rounded-lg shadow">
-          Agregar al carrito 🛒
-        </button>
+
+        {/* Info y botón */}
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6 bg-gradient-to-r from-yellow-50 to-amber-50 p-6 rounded-xl border border-yellow-200 mb-8">
+          <div>
+            <p className="text-gray-600 text-sm mb-1">Precio</p>
+            <p className="text-4xl font-bold text-yellow-600">${producto.precio.toFixed(2)}</p>
+          </div>
+          <button onClick={agregarAlCarrito}
+            className="w-full sm:w-auto bg-yellow-400 hover:bg-yellow-500 text-white font-bold py-4 px-8 rounded-lg shadow-elevation-2 hover:shadow-elevation-3 transition-all duration-200 active:scale-95 text-lg">
+            Agregar al carrito 🛒
+          </button>
+        </div>
       </div>
 
       {/* Reseñas */}
-      <div className="mt-10">
-        <h3 className="text-2xl font-alfa text-yellow-500 mb-6">Reseñas del producto</h3>
-        <div className="space-y-4 mb-8">
+      <div className="mt-12">
+        <h3 className="text-3xl font-bold text-gray-900 mb-8">Reseñas del producto</h3>
+        
+        {/* Lista de reseñas */}
+        <div className="space-y-4 mb-10">
           {reseñas.length === 0 ? (
-            <p className="text-gray-400 text-center py-4">Aún no hay reseñas. ¡Sé el primero! 🌟</p>
+            <div className="text-center py-12 bg-white rounded-xl border-2 border-dashed border-gray-200">
+              <p className="text-6xl mb-3">⭐</p>
+              <p className="text-gray-500 text-lg">Aún no hay reseñas. ¡Sé el primero!</p>
+            </div>
           ) : reseñas.map((r: any) => (
-            <div key={r._id} className="bg-white rounded-xl shadow p-4">
-              <div className="flex justify-between items-start flex-wrap gap-2">
+            <div key={r._id} className="bg-white rounded-xl shadow-elevation-1 hover:shadow-elevation-2 p-6 border border-gray-100 transition-all">
+              <div className="flex justify-between items-start flex-wrap gap-2 mb-3">
                 <div>
-                  <p className="font-semibold text-gray-800">{r.autor}</p>
-                  <p className="text-yellow-400 text-lg">{"★".repeat(r.estrellas)}{"☆".repeat(5 - r.estrellas)}</p>
+                  <p className="font-bold text-gray-900 text-lg">{r.autor}</p>
+                  <div className="flex gap-1 mt-1">
+                    {[...Array(5)].map((_, i) => (
+                      <span key={i} className={i < r.estrellas ? "text-yellow-400 text-lg" : "text-gray-300 text-lg"}>
+                        ★
+                      </span>
+                    ))}
+                  </div>
                 </div>
-                <p className="text-xs text-gray-400">{new Date(r.fecha).toLocaleDateString()}</p>
+                <p className="text-xs text-gray-400 font-medium">{new Date(r.fecha).toLocaleDateString('es-ES')}</p>
               </div>
-              <p className="text-gray-600 mt-2">{r.comentario}</p>
+              <p className="text-gray-700 leading-relaxed">{r.comentario}</p>
             </div>
           ))}
         </div>
 
         {/* Formulario reseña */}
-        <div className="bg-white rounded-xl shadow p-4 sm:p-6 space-y-4">
-          <h4 className="text-lg font-semibold text-gray-700">Deja tu reseña ✍️</h4>
-          <input value={autor} onChange={e => setAutor(e.target.value)}
-            placeholder="Tu nombre"
-            className="border border-gray-200 rounded-lg p-3 w-full bg-pink-50 focus:outline-none focus:border-yellow-400" />
-          <textarea value={comentario} onChange={e => setComentario(e.target.value)}
-            placeholder="¿Qué te pareció el producto?" rows={3}
-            className="border border-gray-200 rounded-lg p-3 w-full bg-pink-50 focus:outline-none focus:border-yellow-400" />
-          <StarRating onChange={setEstrellas} />
-          <button onClick={enviarReseña}
-            className="w-full bg-yellow-400 hover:bg-yellow-500 text-white font-semibold py-3 px-6 rounded-xl shadow transition">
-            Enviar reseña 🌟
-          </button>
+        <div className="bg-white rounded-2xl shadow-elevation-2 p-8 border border-gray-100">
+          <h4 className="text-2xl font-bold text-gray-900 mb-6">Deja tu reseña ✍️</h4>
+          
+          <div className="space-y-5">
+            <div>
+              <label className="text-sm font-medium text-gray-700 block mb-2">Tu nombre</label>
+              <input 
+                value={autor} 
+                onChange={e => setAutor(e.target.value)}
+                placeholder="Tu nombre completo"
+                className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-yellow-400 focus:ring-2 focus:ring-yellow-200 focus:outline-none transition-all bg-white"
+              />
+            </div>
+
+            <div>
+              <label className="text-sm font-medium text-gray-700 block mb-2">Tu reseña</label>
+              <textarea 
+                value={comentario} 
+                onChange={e => setComentario(e.target.value)}
+                placeholder="¿Qué te pareció el producto? Sé honesto y detallado"
+                rows={4}
+                className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-yellow-400 focus:ring-2 focus:ring-yellow-200 focus:outline-none transition-all bg-white resize-none"
+              />
+            </div>
+
+            <div>
+              <label className="text-sm font-medium text-gray-700 block mb-3">Calificación</label>
+              <StarRating onChange={setEstrellas} />
+            </div>
+
+            <button 
+              onClick={enviarReseña}
+              className="w-full bg-yellow-400 hover:bg-yellow-500 text-white font-bold py-3 px-6 rounded-lg shadow-elevation-2 hover:shadow-elevation-3 transition-all duration-200 active:scale-95"
+            >
+              Enviar reseña 🌟
+            </button>
+          </div>
         </div>
       </div>
 
       {/* Modal imagen */}
       {modalImg && (
-        <div className="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-50 p-4"
-          onClick={() => setModalImg(null)}>
-          <img src={modalImg} alt="Ampliada" className="max-w-full max-h-full rounded-lg shadow-lg" />
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-50 p-4 backdrop-blur-sm"
+          onClick={() => setModalImg(null)}
+        >
+          <div className="relative max-w-4xl w-full">
+            <img 
+              src={modalImg} 
+              alt="Ampliada" 
+              className="w-full h-auto rounded-lg shadow-elevation-3"
+              onClick={e => e.stopPropagation()}
+            />
+            <button
+              onClick={() => setModalImg(null)}
+              className="absolute top-4 right-4 bg-white hover:bg-gray-100 text-gray-900 w-10 h-10 rounded-full flex items-center justify-center shadow-elevation-2 font-bold text-xl"
+            >
+              ✕
+            </button>
+          </div>
         </div>
       )}
     </main>

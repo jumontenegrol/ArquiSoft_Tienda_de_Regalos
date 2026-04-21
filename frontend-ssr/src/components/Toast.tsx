@@ -24,16 +24,16 @@ export default function ToastContainer() {
       setToasts(prev => [...prev, { id, mensaje, tipo }]);
       setTimeout(() => {
         setToasts(prev => prev.filter(t => t.id !== id));
-      }, 3000);
+      }, 4000);
     };
     return () => { addToastFn = null; };
   }, []);
 
   const colores = {
-    success: "bg-green-500",
-    error: "bg-red-400",
-    warning: "bg-yellow-400",
-    info: "bg-gray-700",
+    success: "bg-gradient-to-r from-green-400 to-emerald-500",
+    error: "bg-gradient-to-r from-red-400 to-rose-500",
+    warning: "bg-gradient-to-r from-yellow-400 to-amber-500",
+    info: "bg-gradient-to-r from-blue-500 to-cyan-500",
   };
 
   const iconos = {
@@ -41,13 +41,12 @@ export default function ToastContainer() {
   };
 
   return (
-    // Responsive placement: centered on small screens, right-aligned on sm+
-    <div className="fixed top-6 left-1/2 sm:left-auto right-6 -translate-x-1/2 sm:translate-x-0 z-50 flex flex-col gap-2 items-center sm:items-end px-4">
+    <div className="fixed top-6 left-1/2 sm:left-auto right-6 -translate-x-1/2 sm:translate-x-0 z-50 flex flex-col gap-3 items-center sm:items-end px-4 pointer-events-none">
       {toasts.map(t => (
         <div key={t.id}
-          className={`${colores[t.tipo]} text-white px-5 py-4 rounded-xl shadow-xl flex items-center gap-3 text-sm font-semibold max-w-sm w-full sm:w-auto animate-slide-in`}>
-          <span className="text-xl">{iconos[t.tipo]}</span>
-          <span>{t.mensaje}</span>
+          className={`${colores[t.tipo]} text-white px-6 py-4 rounded-lg shadow-elevation-3 flex items-center gap-3 text-sm font-semibold max-w-sm w-full sm:w-auto animate-slide-in pointer-events-auto`}>
+          <span className="text-lg flex-shrink-0">{iconos[t.tipo]}</span>
+          <span className="flex-1">{t.mensaje}</span>
         </div>
       ))}
     </div>

@@ -6,7 +6,11 @@ const jwt = require("jsonwebtoken");
 const app = express();
 
 app.use(cors({
-  origin: "http://localhost:3001", 
+  origin: [
+    "http://localhost:8080",
+    "http://localhost:3001",
+    "https://tienda-regalos-frontend.vercel.app"
+  ], 
   credentials: true
 }));
 app.use(express.json());
@@ -148,6 +152,14 @@ app.post("/api/reviews", async (req, res) => {
     res.json(response.data);
   } catch (error) {
     res.status(500).json({ error: "Error creando reseña" });
+app.get("/api/orders", verifyToken, async (req, res) => {
+  try {
+    // Redirigimos la petición al microservicio de órdenes (Puerto 5000)
+    const response = await axios.get(`${ORDER_SERVICE_URL}/orders`);
+    res.json(response.data);
+  } catch (error) {
+    console.error("Error al obtener órdenes del microservicio:", error.message);
+    res.status(500).json({ error: "Error obteniendo pedidos" });
   }
 });
 

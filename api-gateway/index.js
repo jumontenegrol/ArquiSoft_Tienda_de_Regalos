@@ -142,6 +142,15 @@ app.post("/api/orders", verifyToken, async (req, res) => {
   }
 });
 
+app.post("/api/reviews", async (req, res) => {
+  try {
+    const response = await axios.post(`${REVIEW_SERVICE_URL}/reviews`, req.body);
+    res.json(response.data);
+  } catch (error) {
+    res.status(500).json({ error: "Error creando reseña" });
+  }
+});
+
 app.get("/api/reviews/:product_id", async (req, res) => {
   try {
     const response = await axios.get(`${REVIEW_SERVICE_URL}/reviews/${req.params.product_id}`);

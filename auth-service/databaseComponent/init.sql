@@ -12,11 +12,15 @@ CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
 
 
+-- Admin inicial del sistema.
+-- Credenciales: gonzalezsierrajuandaiel10@gmail.com / Admin123
+-- El ON CONFLICT DO UPDATE asegura que si el correo ya existe (por un
+-- registro previo desde la UI o una semilla vieja), quede como admin.
 INSERT INTO users (username, email, password_hash, role)
 VALUES (
-    'admin_root', 
-    'juanda.gonzalezs10@gmail.com', 
-    '$2a$12$tp/Vj6lVLOge3nxZquVtweg3UPg1aCYIFzecJq4LM3nFOgcaQ.Cbm', 
+    'admin_root',
+    'gonzalezsierrajuandaiel10@gmail.com',
+    '$2b$12$wKHPUmZ4uhlL2Y7xI4DxuumKkAoujUI0dtmkY3LhfNGW8.BWopiJO',
     1
-) 
-ON CONFLICT (email) DO NOTHING;
+)
+ON CONFLICT (email) DO UPDATE SET role = 1;

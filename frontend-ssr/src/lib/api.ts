@@ -5,10 +5,9 @@ const isBrowser = typeof window !== "undefined";
  * Si es el navegador, usamos localhost para que tu Chrome/Edge encuentre el Gateway.
  * Si es el servidor, usamos api-gateway para que la red interna de Docker funcione.
  */
-const API_URL = isBrowser 
-  ? "http://localhost:3000" 
-  : "http://api-gateway:3000";
-
+const API_URL = isBrowser
+  ? (process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000")
+  : (process.env.API_URL || "http://api-gateway:3000");
 /**
  * Helper para manejar fetch con headers dinámicos y errores controlados.
  */

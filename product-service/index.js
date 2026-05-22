@@ -25,14 +25,18 @@ const pool = new Pool(
 
 
 async function waitForDB() {
-// ✅ Inicializar tabla una sola vez al arrancar
-  let connected = false;
-  while (!connected) {
+  let retries = 5;
+  while (retries > 0) {
     try {
       await pool.query("SELECT 1");
-      connected = true;
       console.log("Conectado a PostgreSQL");
+      return true;
     } catch (error) {
+      retries--;
+      if (retries === 0) {
+        console.error("No se pudo conectar a PostgreSQL:", error.message);
+        return false;
+      }
       console.log("Esperando a PostgreSQL...");
       await new Promise(res => setTimeout(res, 2000));
     }
@@ -40,7 +44,8 @@ async function waitForDB() {
 }
 
 async function initDB() {
-  await waitForDB();
+  const ok = await waitForDB();
+  if (!ok) return;
   try {
     await pool.query(`
       CREATE TABLE IF NOT EXISTS products (
@@ -64,6 +69,10 @@ async function initDB() {
 }
 
 initDB();
+
+app.get("/", (req, res) => {
+  res.json({ status: "ok", service: "product-service" });
+});
 
 app.get("/products", async (req, res) => {
   try {

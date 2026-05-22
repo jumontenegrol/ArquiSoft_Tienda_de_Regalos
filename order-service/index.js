@@ -27,22 +27,29 @@ const pool = new Pool(
 
 // ── Esperar PostgreSQL ─────────────────────────────────
 async function waitForDB() {
-  let connected = false;
-  while (!connected) {
+  let retries = 5;
+  while (retries > 0) {
     try {
       await pool.query("SELECT 1");
-      connected = true;
-      console.log("✅ Conectado a PostgreSQL (Orders)");
-    } catch {
-      console.log("⏳ Esperando PostgreSQL (Orders)...");
-      await new Promise(r => setTimeout(r, 2000));
+      console.log("Conectado a PostgreSQL");
+      return true;
+    } catch (error) {
+      retries--;
+      if (retries === 0) {
+        console.error("No se pudo conectar a PostgreSQL:", error.message);
+        return false;
+      }
+      console.log("Esperando a PostgreSQL...");
+      await new Promise(res => setTimeout(res, 2000));
     }
   }
 }
 
+
 // ── Inicializar tablas ─────────────────────────────────
 async function initDB() {
-  await waitForDB();
+  const ok = await waitForDB();
+  if (!ok) return;
   try {
     await pool.query(`
       CREATE TABLE IF NOT EXISTS orders (
@@ -91,6 +98,10 @@ async function start() {
 }
 
 start();
+
+app.get("/", (req, res) => {
+  res.json({ status: "ok", service: "order-service" });
+});
 
 // ── Carrito persistente por usuario (x-user-id viene del api-gateway) ──
 app.get("/cart", async (req, res) => {

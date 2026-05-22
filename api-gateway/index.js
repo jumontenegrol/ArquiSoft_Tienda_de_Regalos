@@ -11,7 +11,8 @@ app.use(cors({
   origin: [
     "http://localhost:8080",
     "http://localhost:3001",
-    "https://tienda-regalos-frontend.vercel.app"
+    "https://tienda-regalos-frontend.vercel.app",
+    "https://arqui-soft-tienda-de-regalos.vercel.app"  
   ], 
   credentials: true
 }));

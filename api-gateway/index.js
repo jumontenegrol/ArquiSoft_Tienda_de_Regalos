@@ -46,8 +46,7 @@ app.get("/", (req, res) => {
 });
 
 // ── RUTAS DEL CARRITO ──────────────────────
-//app.get("/api/cart", verifyToken, async (req, res) => {
-app.get("/api/cart", async (req, res) => {
+app.get("/api/cart", verifyToken, async (req, res) => {
   try {
     const userId = req.user.userId || req.user.id;
     const response = await axios.get(`${ORDER_SERVICE_URL}/cart`, {
@@ -59,8 +58,7 @@ app.get("/api/cart", async (req, res) => {
   }
 });
 
-//app.post("/api/cart", verifyToken, async (req, res) => {
-app.post("/api/cart", async (req, res) => {
+app.post("/api/cart", verifyToken, async (req, res) => {
   try {
     const userId = req.user.userId || req.user.id;
     const response = await axios.post(`${ORDER_SERVICE_URL}/cart`, req.body, {
@@ -72,8 +70,7 @@ app.post("/api/cart", async (req, res) => {
   }
 });
 
-//app.delete("/api/cart/:id", verifyToken, async (req, res) => {
-app.delete("/api/cart/:id", async (req, res) => {
+app.delete("/api/cart/:id", verifyToken, async (req, res) => {
   try {
     const userId = req.user.userId || req.user.id;
     const response = await axios.delete(`${ORDER_SERVICE_URL}/cart/${req.params.id}`, {

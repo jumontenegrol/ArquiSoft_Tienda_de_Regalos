@@ -17,7 +17,11 @@ export default function ProductoClient({ producto, reseñasIniciales }: { produc
   const [estrellas, setEstrellas] = useState(0);
   const [modalImg, setModalImg] = useState<string | null>(null);
 
-  const imagenes = [producto.imagen1, producto.imagen2, producto.imagen3].filter(Boolean);
+  const normalizeImg = (img: string) =>
+    encodeURI(img.startsWith("/") ? img : `/${img}`);
+  const imagenes = [producto.imagen1, producto.imagen2, producto.imagen3]
+    .filter(Boolean)
+    .map(normalizeImg);
 
   async function agregarAlCarrito() {
     // 1. Obtenemos el token de la sesión

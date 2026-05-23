@@ -6,26 +6,35 @@
 #include <vector>
 #include <optional>
 #include <iostream>
+#include <cstdlib>
 
 class Database {
 private:
-    std::string conn_str = "host=auth-db port=5432 dbname=auth_db user=user_auth password=password_segura";
+    std::string buildConnStr() {
+        const char* host     = std::getenv("DB_HOST");
+        const char* port     = std::getenv("DB_PORT");
+        const char* dbname   = std::getenv("DB_NAME");
+        const char* user     = std::getenv("DB_USER");
+        const char* password = std::getenv("DB_PASSWORD");
+
+        return std::string("host=")     + (host     ? host     : "auth-db")
+             + " port="                 + (port     ? port     : "5432")
+             + " dbname="               + (dbname   ? dbname   : "auth_db")
+             + " user="                 + (user     ? user     : "user_auth")
+             + " password="             + (password ? password : "password_segura");
+    }
 
 public:
-    // 1. CREAR USUARIO (Persistente en la DB)
     bool createUser(User user) {
         try {
-            pqxx::connection C(conn_str);
+            pqxx::connection C(buildConnStr());
             pqxx::work W(C);
-            
-            // Usamos W.quote para evitar inyecciones SQL (seguridad SAP-grade)
             W.exec0("INSERT INTO users (username, email, password_hash, role) VALUES (" +
-                   W.quote(user.username) + ", " + 
-                   W.quote(user.email) + ", " + 
-                   W.quote(user.password_hash) + ", " + 
+                   W.quote(user.username) + ", " +
+                   W.quote(user.email) + ", " +
+                   W.quote(user.password_hash) + ", " +
                    std::to_string(static_cast<int>(user.role)) + ")");
-            
-            W.commit(); // Aquí es donde realmente se guarda en el disco
+            W.commit();
             return true;
         } catch (const std::exception &e) {
             std::cerr << "Error en createUser: " << e.what() << std::endl;
@@ -33,15 +42,12 @@ public:
         }
     }
 
-    // 2. BUSCAR POR EMAIL (Para el Login)
     std::optional<User> findByEmail(const std::string& email) {
         try {
-            pqxx::connection C(conn_str);
+            pqxx::connection C(buildConnStr());
             pqxx::nontransaction N(C);
             pqxx::result R = N.exec("SELECT id, username, email, password_hash, role FROM users WHERE email = " + N.quote(email));
-
             if (R.empty()) return std::nullopt;
-
             User u;
             u.id = R[0][0].as<int>();
             u.username = R[0][1].as<std::string>();
@@ -55,18 +61,15 @@ public:
         }
     }
 
-    // 3. ACTUALIZAR ROL (Para la función de Promoción)
     bool updateRole(int id, UserRole newRole) {
         try {
-            pqxx::connection C(conn_str);
+            pqxx::connection C(buildConnStr());
             pqxx::work W(C);
-            
-            pqxx::result R = W.exec("UPDATE users SET role = " + 
-                                   std::to_string(static_cast<int>(newRole)) + 
+            pqxx::result R = W.exec("UPDATE users SET role = " +
+                                   std::to_string(static_cast<int>(newRole)) +
                                    " WHERE id = " + std::to_string(id));
-            
             W.commit();
-            return R.affected_rows() > 0; // Si no encontró el ID, devuelve false
+            return R.affected_rows() > 0;
         } catch (const std::exception &e) {
             std::cerr << "Error en updateRole: " << e.what() << std::endl;
             return false;

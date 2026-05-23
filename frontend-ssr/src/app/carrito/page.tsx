@@ -187,7 +187,7 @@ export default function CarritoPage() {
                       {/* Imagen */}
                       <div className="flex-shrink-0">
                         <div className="relative">
-                          <img src={item.imagen1 || ""} alt={item.nombre}
+                          <img src={item.imagen1 ? encodeURI(item.imagen1.startsWith("/") ? item.imagen1 : `/${item.imagen1}`) : ""} alt={item.nombre}
                             className="w-28 h-28 object-cover rounded-xl shadow-elevation-1"
                             onError={(e: any) => e.target.style.display = "none"} />
                           <div className="absolute -top-2 -right-2 bg-yellow-400 text-white px-3 py-1 rounded-full text-xs font-bold">

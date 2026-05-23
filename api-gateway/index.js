@@ -162,8 +162,7 @@ app.delete("/api/products/:id", async (req, res) => {
 });
 
 // ── ÓRDENES Y RESEÑAS ──────────────────────
-//app.post("/api/orders", verifyToken, async (req, res) => {
-app.post("/api/orders", async (req, res) => {
+app.post("/api/orders", verifyToken, async (req, res) => {
   try {
     const orderWithUser = { ...req.body, customerId: req.user.userId || req.user.id };
     const response = await axios.post(`${ORDER_SERVICE_URL}/orders`, orderWithUser);
@@ -182,8 +181,7 @@ app.post("/api/reviews", async (req, res) => {
   }
 });
 
-//app.get("/api/orders", verifyToken, async (req, res) => {
-app.get("/api/orders", async (req, res) => {
+app.get("/api/orders", verifyToken, async (req, res) => {
   try {
     const response = await axios.get(`${ORDER_SERVICE_URL}/orders`);
     res.json(response.data);

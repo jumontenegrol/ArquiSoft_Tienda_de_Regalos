@@ -8,12 +8,23 @@ const { client: redis, connect: connectRedis } = require("./redis");
 const app = express();
 
 app.use(cors({
-  origin: [
-    "http://localhost:8080",
-    "http://localhost:3001",
-    "https://tienda-regalos-frontend.vercel.app",
-    "https://arqui-soft-tienda-de-regalos.vercel.app"  
-  ], 
+  origin: function (origin, callback) {
+    const allowed = [
+      "http://localhost:8080",
+      "http://localhost:3001",
+      "http://localhost:3000",
+    ];
+    if (
+      !origin ||
+      allowed.includes(origin) ||
+      /arqui-soft-tienda-de-regalos.*\.vercel\.app$/.test(origin) ||
+      /tienda-regalos.*\.vercel\.app$/.test(origin)
+    ) {
+      callback(null, true);
+    } else {
+      callback(new Error("Not allowed by CORS"));
+    }
+  },
   credentials: true
 }));
 app.use(express.json());

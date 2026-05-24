@@ -178,16 +178,38 @@ export default function AdminPage() {
                 <FormInput key={campo} textarea rows={3} placeholder="Descripción" value={(form as any)[campo]}
                   onChange={e => setForm(f => ({ ...f, [campo]: e.target.value }))} />
               ) : (campo.startsWith("imagen") ? (
-                <div key={campo} className="space-y-2">
-                  <FormInput placeholder={campo.charAt(0).toUpperCase() + campo.slice(1)}
-                    value={(form as any)[campo]}
-                    onChange={e => setForm(f => ({ ...f, [campo]: e.target.value }))} />
-                  <div className="flex items-center gap-2">
-                    <input type="file" accept="image/*" onChange={(e) => handleFileChange(e as any, campo)}
-                      className="text-sm" />
-                    <span className="text-xs text-gray-400">Sube una imagen y se guardará en /uploads</span>
+                  <div key={campo} className="space-y-2">
+                    <label className="text-sm font-medium text-gray-600">
+                      {campo === "imagen1" ? "Imagen principal" : campo === "imagen2" ? "Imagen 2 (opcional)" : "Imagen 3 (opcional)"}
+                    </label>
+                    <div className="flex gap-2 items-center">
+                      <FormInput
+                        placeholder="URL de imagen o sube un archivo"
+                        value={(form as any)[campo]}
+                        onChange={e => setForm(f => ({ ...f, [campo]: e.target.value }))}
+                      />
+                      <label className="cursor-pointer flex-shrink-0 flex items-center gap-2 bg-yellow-400 hover:bg-yellow-500 active:scale-95 text-white font-semibold px-4 py-2 rounded-lg transition-all shadow-md text-sm whitespace-nowrap select-none">
+                        📁 Subir
+                        <input type="file" accept="image/*" className="hidden"
+                          onChange={(e) => handleFileChange(e as any, campo)} />
+                      </label>
+                    </div>
+                    {(form as any)[campo] && (
+                      <div className="relative inline-block">
+                        <img
+                          src={(form as any)[campo]}
+                          alt={`Preview ${campo}`}
+                          className="h-24 w-24 object-cover rounded-lg border-2 border-yellow-300 shadow"
+                          onError={(e: any) => { e.target.style.display = 'none'; }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setForm(f => ({ ...f, [campo]: "" }))}
+                          className="absolute -top-2 -right-2 bg-red-500 hover:bg-red-600 text-white w-5 h-5 rounded-full text-xs flex items-center justify-center shadow font-bold"
+                        >✕</button>
+                      </div>
+                    )}
                   </div>
-                </div>
               ) : (
                 <FormInput key={campo} placeholder={campo.charAt(0).toUpperCase() + campo.slice(1)}
                   value={(form as any)[campo]}

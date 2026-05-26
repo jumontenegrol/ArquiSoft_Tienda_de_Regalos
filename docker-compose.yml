@@ -82,13 +82,18 @@ services:
       - api-gateway
     networks:
       - app-network
-
+  
   frontend-ssr:
-    build: ./frontend-ssr
+    build:
+      context: ./frontend-ssr
+      args:
+        - NEXT_PUBLIC_API_URL=http://localhost:3000
     ports:
       - "3001:3001"
     depends_on:
       - api-gateway
+    environment:
+      - API_URL=http://api-gateway:3000
     volumes:
       - ./frontend-ssr/public/uploads:/app/public/uploads
     networks:

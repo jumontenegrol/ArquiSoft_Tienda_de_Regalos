@@ -17,8 +17,10 @@ services:
       - auth-service
       - rabbitmq
       - redis
+    # S1: api-gateway es el único bridge entre redes
     networks:
-      - app-network
+      - public-network
+      - private-network
 
   product-service:
     build: ./product-service
@@ -32,7 +34,7 @@ services:
       - DB_NAME=giftshop
       - DB_PORT=5432
     networks:
-      - app-network
+      - private-network
 
   postgres:
     image: postgres:15
@@ -44,7 +46,7 @@ services:
     volumes:
       - products_data:/var/lib/postgresql/data
     networks:
-      - app-network
+      - private-network
 
   order-service:
     build: ./order-service
@@ -60,7 +62,7 @@ services:
       - RABBITMQ_URL=amqp://admin:admin@rabbitmq:5672
       - PORT=5000
     networks:
-      - app-network
+      - private-network
 
   orders-postgres:
     image: postgres:15
@@ -72,7 +74,7 @@ services:
     volumes:
       - orders_data:/var/lib/postgresql/data
     networks:
-      - app-network
+      - private-network
 
   frontend:
     build: ./frontend
@@ -81,8 +83,8 @@ services:
     depends_on:
       - api-gateway
     networks:
-      - app-network
-  
+      - public-network
+
   frontend-ssr:
     build:
       context: ./frontend-ssr
@@ -97,7 +99,7 @@ services:
     volumes:
       - ./frontend-ssr/public/uploads:/app/public/uploads
     networks:
-      - app-network
+      - public-network
 
   review-service:
     build: ./review-service
@@ -107,7 +109,7 @@ services:
     - PORT=6000
     - MONGO_URI=mongodb://mongo:27017/reviewsdb
     networks:
-      - app-network
+      - private-network
 
   mongo:
     image: mongo:6
@@ -115,7 +117,7 @@ services:
     volumes:
       - reviews_data:/data/db
     networks:
-      - app-network
+      - private-network
 
   notification-service:
     build: ./notification-service
@@ -127,28 +129,27 @@ services:
     environment:
       - RABBITMQ_URL=amqp://admin:admin@rabbitmq:5672
       - REDIS_URL=redis://redis:6379
-      # SMTP: si están vacías, notification-service cae a MOCK (console.log)
       - SMTP_HOST=${SMTP_HOST:-}
       - SMTP_PORT=${SMTP_PORT:-587}
       - SMTP_USER=${SMTP_USER:-}
       - SMTP_PASS=${SMTP_PASS:-}
       - SMTP_FROM=${SMTP_FROM:-}
     networks:
-      - app-network
+      - private-network
 
   rabbitmq:
     image: rabbitmq:3-management
     container_name: rabbitmq
     ports:
       - "5672:5672"
-      - "15672:15672"  # Panel web de RabbitMQ
+      - "15672:15672"
     environment:
       RABBITMQ_DEFAULT_USER: admin
       RABBITMQ_DEFAULT_PASS: admin
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
     networks:
-      - app-network
+      - private-network
 
   redis:
     image: redis:7-alpine
@@ -158,7 +159,7 @@ services:
     volumes:
       - redis_data:/data
     networks:
-      - app-network
+      - private-network
 
   auth-service:
     build: ./auth-service
@@ -168,7 +169,7 @@ services:
     environment:
       - PORT=8080
     networks:
-      - app-network
+      - private-network
 
   auth-db:
     image: postgres:15
@@ -178,13 +179,17 @@ services:
       POSTGRES_PASSWORD: password_segura
       POSTGRES_DB: auth_db
     volumes:
-      - ./auth-service/databaseComponent/init.sql:/docker-entrypoint-initdb.d/init.sql 
+      - ./auth-service/databaseComponent/init.sql:/docker-entrypoint-initdb.d/init.sql
       - auth_data:/var/lib/postgresql/data
     networks:
-      - app-network
+      - private-network
 
+# S1: Network Segmentation
+# public-network  → frontend + api-gateway (expuesto al exterior)
+# private-network → microservicios + bases de datos (solo accesible internamente)
 networks:
-  app-network:
+  public-network:
+  private-network:
 
 volumes:
   products_data:

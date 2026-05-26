@@ -8,6 +8,7 @@ app.use(cors());
 app.use(express.json());
 
 // ── Pool: Vercel usa DATABASE_URL, local usa credenciales directas ──
+// R2: Bulkhead — cap pool size to isolate DB resource consumption
 const pool = new Pool(
   process.env.DATABASE_URL
     ? {
@@ -15,6 +16,8 @@ const pool = new Pool(
         ssl: process.env.NODE_ENV === "production"
           ? { rejectUnauthorized: false }
           : false,
+        max: 10,                        // ← AGREGAR
+        connectionTimeoutMillis: 5000,  // ← AGREGAR
       }
     : {
         host: process.env.DB_HOST || "orders-postgres",
@@ -22,9 +25,10 @@ const pool = new Pool(
         password: process.env.DB_PASSWORD || "admin",
         database: process.env.DB_NAME || "ordersdb",
         port: process.env.DB_PORT || 5432,
+        max: 10,                        // ← AGREGAR
+        connectionTimeoutMillis: 5000,  // ← AGREGAR
       }
 );
-
 // ── Esperar PostgreSQL ─────────────────────────────────
 async function waitForDB() {
   let retries = 5;

@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 import { getProductos } from "../lib/api";
 import Link from "next/link";
 import ImageWithFallback from "../components/ImageWithFallback";

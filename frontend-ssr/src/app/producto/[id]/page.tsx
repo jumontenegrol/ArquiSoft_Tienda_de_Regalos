@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 import { getProducto, getReseñas } from "../../../lib/api";
 import ProductoClient from "./ProductoClient";
 

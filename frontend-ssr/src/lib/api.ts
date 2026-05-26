@@ -1,13 +1,12 @@
 // Detectamos si estamos en el navegador o en el servidor (SSR)
 const isBrowser = typeof window !== "undefined";
 
-/** * MODIFICACIÓN CLAVE: 
- * Si es el navegador, usamos localhost para que tu Chrome/Edge encuentre el Gateway.
- * Si es el servidor, usamos api-gateway para que la red interna de Docker funcione.
- */
+// Browser: always uses the public URL (baked at build time via NEXT_PUBLIC_API_URL)
+// Server on Docker: uses API_URL env var pointing to the internal container name
+// Server on Vercel: falls back to NEXT_PUBLIC_API_URL (the public gateway URL)
 const API_URL = isBrowser
   ? (process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000")
-  : (process.env.API_URL || "http://api-gateway:3000");
+  : (process.env.API_URL || process.env.NEXT_PUBLIC_API_URL || "http://api-gateway:3000");
 /**
  * Helper para manejar fetch con headers dinámicos y errores controlados.
  */

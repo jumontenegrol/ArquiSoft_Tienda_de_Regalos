@@ -13,6 +13,21 @@ services:
     networks:
       - public-network
 
+  minio:
+      image: minio/minio
+      container_name: minio
+      ports:
+        - "9000:9000"   # API S3
+        - "9001:9001"   # Consola web
+      environment:
+        MINIO_ROOT_USER: admin
+        MINIO_ROOT_PASSWORD: admin123
+      command: server /data --console-address ":9001"
+      volumes:
+        - minio_data:/data
+      networks:
+        - public-network
+
   api-gateway-1:
     build: ./api-gateway
    
@@ -147,6 +162,11 @@ services:
       - nginx-lb
     environment:
       - API_URL=http://nginx-lb:80
+      - MINIO_ENDPOINT=minio
+      - MINIO_PORT=9000
+      - MINIO_ACCESS_KEY=admin
+      - MINIO_SECRET_KEY=admin123
+      - MINIO_PUBLIC_URL=http://localhost:9000
     volumes:
       - ./frontend-ssr/public/uploads:/app/public/uploads
     networks:
@@ -249,3 +269,4 @@ volumes:
   rabbitmq_data:
   redis_data:
   auth_data:
+  minio_data:

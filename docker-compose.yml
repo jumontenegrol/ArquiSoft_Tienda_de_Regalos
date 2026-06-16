@@ -1,79 +1,27 @@
 services:
 
+  #HOT SPARE: Coordinator
+  #Reemplaza al api-gateway como punto de entrada.
   coordinator:
     build:
-      context: ./coordinator
+      context: ./coordinator          
       dockerfile: Dockerfile.coordinator
     ports:
-      - "80:8080"
+      - "8080:8080"
     environment:
-      - PRIMARY_URL=http://nginx-lb:80
-      - SECONDARY_URL=http://nginx-lb-spare:80
+      - PRIMARY_URL=http://api-gateway:3000
+      - SECONDARY_URL=http://api-gateway-spare:3000
       - PORT=8080
     depends_on:
-      - nginx-lb
-      - nginx-lb-spare
-    networks:
-      - public-network
-
-  nginx-lb:
-    image: nginx:alpine
-    volumes:
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-    depends_on:
-      - api-gateway-1
-      - api-gateway-2
-      - api-gateway-3
-    networks:
-      - public-network
-
-  nginx-lb-spare:
-    image: nginx:alpine
-    volumes:
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-    depends_on:
-      - api-gateway-1
-      - api-gateway-2
-      - api-gateway-3
-    networks:
-      - public-network
-
-  minio:
-    image: minio/minio
-    container_name: minio
-    ports:
-      - "9000:9000" # API S3
-      - "9001:9001" # Consola web
-    environment:
-      MINIO_ROOT_USER: admin
-      MINIO_ROOT_PASSWORD: admin123
-    command: server /data --console-address ":9001"
-    volumes:
-      - minio_data:/data
-    networks:
-      - public-network
-
-  api-gateway-1:
-    build: ./api-gateway
-    environment:
-      - PRODUCT_SERVICE_URL=http://product-service:4000
-      - ORDER_SERVICE_URL=http://order-service:5000
-      - REVIEW_SERVICE_URL=http://review-service:6000
-      - AUTH_SERVICE_URL=http://auth-service:8080
-      - RABBITMQ_URL=amqp://admin:admin@rabbitmq:5672
-      - REDIS_URL=redis://redis:6379
-    depends_on:
-      - product-service
-      - order-service
-      - auth-service
-      - rabbitmq
-      - redis
+      - api-gateway
+      - api-gateway-spare
     networks:
       - public-network
       - private-network
 
-  api-gateway-2:
+  api-gateway:
     build: ./api-gateway
+    #el coordinator es quien recibe el tráfico externo
     environment:
       - PRODUCT_SERVICE_URL=http://product-service:4000
       - ORDER_SERVICE_URL=http://order-service:5000
@@ -81,17 +29,19 @@ services:
       - AUTH_SERVICE_URL=http://auth-service:8080
       - RABBITMQ_URL=amqp://admin:admin@rabbitmq:5672
       - REDIS_URL=redis://redis:6379
+      - NODE_ROLE=active              
     depends_on:
       - product-service
       - order-service
+      - notification-service
       - auth-service
       - rabbitmq
       - redis
     networks:
-      - public-network
       - private-network
 
-  api-gateway-3:
+
+  api-gateway-spare:
     build: ./api-gateway
     environment:
       - PRODUCT_SERVICE_URL=http://product-service:4000
@@ -100,6 +50,7 @@ services:
       - AUTH_SERVICE_URL=http://auth-service:8080
       - RABBITMQ_URL=amqp://admin:admin@rabbitmq:5672
       - REDIS_URL=redis://redis:6379
+      - NODE_ROLE=spare
     depends_on:
       - product-service
       - order-service
@@ -107,7 +58,6 @@ services:
       - rabbitmq
       - redis
     networks:
-      - public-network
       - private-network
 
   product-service:
@@ -167,9 +117,7 @@ services:
   frontend:
     build: ./frontend
     ports:
-      - "8080:80"
-    environment:
-      - API_URL=http://coordinator:8080
+      - "80:80"
     depends_on:
       - coordinator
     networks:
@@ -179,18 +127,13 @@ services:
     build:
       context: ./frontend-ssr
       args:
-        - NEXT_PUBLIC_API_URL=http://localhost:80
+        - NEXT_PUBLIC_API_URL=http://localhost:8080
     ports:
       - "3001:3001"
     depends_on:
       - coordinator
     environment:
       - API_URL=http://coordinator:8080
-      - MINIO_ENDPOINT=minio
-      - MINIO_PORT=9000
-      - MINIO_ACCESS_KEY=admin
-      - MINIO_SECRET_KEY=admin123
-      - MINIO_PUBLIC_URL=http://localhost:9000
     volumes:
       - ./frontend-ssr/public/uploads:/app/public/uploads
     networks:
@@ -279,9 +222,9 @@ services:
     networks:
       - private-network
 
-# Network Segmentation
-# public-network  → coordinator + nginx-lb + nginx-lb-spare + frontends + api-gateways
-# private-network → microservicios + bases de datos
+# S1: Network Segmentation
+# public-network  → frontend + coordinator (expuesto al exterior)
+# private-network → coordinator + api-gateway + api-gateway-spare + microservicios + BDs
 networks:
   public-network:
   private-network:
@@ -293,4 +236,3 @@ volumes:
   rabbitmq_data:
   redis_data:
   auth_data:
-  minio_data:

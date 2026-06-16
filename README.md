@@ -713,17 +713,107 @@ docker start arquisoft_tienda_de_regalos-nginx-lb-1
 # Run the automated test suite
 chmod +x test-failover.sh && ./test-failover.sh
 ```
+
 ---
 
-### Summary Table
+## 5. Kubernetes Deployment (Lab 6 - Reliability Pattern: Cluster)
 
-| ID | Attribute | Pattern | Where Implemented | Key Parameter |
-|----|-----------|---------|-------------------|---------------|
-| S1 | Security | Network Segmentation | `docker-compose.yml` | `internal: true` on private-network |
-| S2 | Security | Rate Limiting | `api-gateway/index.js` | 100 req/min general · 10/15 min login |
-| P1 | Performance | Cache-Aside | `api-gateway/index.js` | Redis TTL 300 s · key `products:all` |
-| P2 | Performance | Event-Driven | `order-service/` + `notification-service/` | RabbitMQ AMQP · async publish/subscribe |
-| R1 | Reliability | Circuit Breaker | `api-gateway/index.js` | timeout 5 s · threshold 50 % · reset 30 s |
-| R2 | Reliability | Bulkhead | `*-service/index.js` (pg.Pool) | max 10 conns · timeout 5 s |
-| R3 | Reliability | Active Redundancy | `coordinator/coordinator.js` | Parallel fan-out · < 500ms failover |
----
+### Overview
+
+The `notification-service` microservice has been deployed to a local Kubernetes cluster (Minikube) demonstrating the **Cluster Pattern** for reliability. This ensures automatic pod recovery (self-healing) and horizontal scaling capabilities.
+
+### Quick Start
+
+#### Prerequisites
+- Docker Desktop with WSL2
+- Minikube v1.38.1
+- kubectl v1.36.2
+
+#### 1. Start Kubernetes Cluster
+
+```powershell
+minikube start --cpus 4 --memory 4096 --driver docker
+```
+
+#### 2. Build and Load Docker Image
+
+```powershell
+cd notification-service
+docker build -t notification-service:latest .
+cd ..
+minikube image load notification-service:latest
+```
+
+#### 3. Start RabbitMQ and Redis
+
+```powershell
+docker-compose up -d rabbitmq redis
+```
+
+#### 4. Deploy to Kubernetes
+
+```powershell
+kubectl apply -f k8s/configmap.yaml
+kubectl apply -f k8s/notification-deployment.yaml
+kubectl apply -f k8s/notification-service.yaml
+```
+
+#### 5. Verify Deployment
+
+```powershell
+kubectl get pods -l app=notification-service -o wide
+# Expected: 3 pods in Running state
+```
+
+### Key Features
+
+| Feature | Implementation | Reliability Benefit |
+|---------|---|---|
+| **Replicas** | 3 pods running simultaneously | Tolerate 2 pod failures |
+| **Self-Healing** | Liveness probes + automatic restart | Recover from crashes in < 1 minute |
+| **Load Balancing** | Service distributes traffic round-robin | Transparent failover |
+| **Scaling** | `kubectl scale` to increase replicas | Horizontal scalability |
+| **Health Checks** | HTTP `/health` endpoint | Real-time pod status |
+
+### Testing
+
+#### Test Self-Healing
+
+```powershell
+# Delete a pod manually
+kubectl delete pod <pod-name>
+
+# Observe automatic recreation
+kubectl get pods -l app=notification-service --watch
+```
+
+#### Test Scaling
+
+```powershell
+# Scale to 5 replicas
+kubectl scale deployment notification-service --replicas=5
+
+# Scale down to 2
+kubectl scale deployment notification-service --replicas=2
+```
+
+### Cluster Type: Active/Active
+
+The deployment uses an **Active/Active cluster** where:
+- All 3 replicas actively process messages from RabbitMQ
+- No standby nodes (all nodes contributing to throughput)
+- Load distributed equally across all healthy pods
+
+### Full Documentation
+
+For comprehensive technical details, architecture diagrams, evidence of self-healing/scaling, and troubleshooting guides, see:
+
+📖 **[k8s/README-K8S-DEPLOYMENT.md](k8s/README-K8S-DEPLOYMENT.md)**
+
+### Files Created
+
+- `k8s/configmap.yaml` — Environment configuration
+- `k8s/notification-deployment.yaml` — Deployment with 3 replicas and health checks
+- `k8s/notification-service.yaml` — Internal load balancer
+- `k8s/hpa.yaml` — Horizontal Pod Autoscaler (optional)
+- `k8s/README-K8S-DEPLOYMENT.md` — Full technical guide

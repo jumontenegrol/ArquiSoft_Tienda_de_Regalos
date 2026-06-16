@@ -41,66 +41,70 @@ The system is built following a **microservices architecture**, where each busin
  #### C&C View
 
 The following diagram illustrates the runtime components of the system and their connectors:
-<img width="794" height="1133" alt="C C View" src="assets/C&C View.drawio (2).png" />
+<img width="794" alt="C C View-Página-2 drawio (1)" src="https://github.com/user-attachments/assets/1390f7ca-3c1c-48c4-8e85-872c3b5bc054" />
 
 
 
- #### Description of Architectural Elements and Relations
+#### Description of Architectural Elements and Relations
 
 | Element | Type | Technology | Responsibility |
 |---------|------|------------|----------------|
 | Web Browser | External Client | Host OS / HTTP Client | Generates user input, rendering the visible layouts. Initiates asynchronous web requests towards the application boundary to interact with the catalog, carts, and user panels. |
 | Frontend (CSR) | Client Component | HTML5, CSS3, Vanilla JS, Tailwind CSS | Client-Side rendering of the application's user interface. Dynamically fetches and updates DOM content for features like carts and admin dashboards without requesting full page reloads from the server. |
-| Frontend SSR | Client Component | Node.js, Express.js | Server-Side computational unit generating pre-rendered HTML views of the application to ensure fast initial page loads and optimal indexing for the store. |
-| API Gateway | Orchestrator / Proxy Service | Node.js, Express.js | Central reverse-proxy and request dispatcher. Protects the internal system boundary by providing a unified endpoint. Intercepts incoming traffic, strictly verifies authorization (validates JWT logic internally before delegating requests), and balances loads across inner microservices. |
-| Auth Service | Logic Service | C++ Native (GCC, libbcrypt) | Handles intensive cryptographic computing requirements. Responsible for managing credential hashing, executing secure user registration/logins, and generating valid JSON Web Tokens (JWT) for system-wide trust. |
-| Product Service | Logic Service | Node.js, Express.js | Core domain element executing inventory algorithms. It queries, creates, updates, and removes available giftshop products, maintaining strong control over product imagery attributes and physical stock calculation rules. |
-| Order Service | Logic Service | Node.js, Express.js | Transactional logic processor for cart and billing behaviors. Implements upsert operations to manage persistent customer shopping carts, aggregates active checkouts, calculates final totals, and generates async checkout events upon order completion. |
-| Review Service | Logic Service | Python, FastAPI, Uvicorn | Independent processing node for customer feedback logic. Handles validations for 1-to-5 star ratings, captures textual opinions securely, and exposes product-rating aggregations for the frontends. |
-| Notification Service | Logic Worker | Node.js | Headless background process. Subscribes to the internal broker as a listener, reacting to newly registered orders by firing notification and post-transaction routines without obstructing frontend API times. |
+| Frontend SSR | Client Component | Node.js, Next.js / Express | Server-Side computational unit generating pre-rendered HTML views of the application to ensure fast initial page loads and optimal indexing. Interacts directly with MinIO to serve and manage uploaded media. |
+| MinIO | Data Store / Object Storage | MinIO (S3 Compatible) | Centralized object storage system managing static assets, product imagery, and user uploads. Exposes an S3-compatible API for the SSR application and a Web Console for administration. |
+| Coordinator | Failover Router | Node.js / Custom Router | Primary entry point for the public network boundary. Acts as a failover router directing external traffic securely into either the primary or the spare load balancers. |
+| NGINX-LB & NGINX-LB-SPARE | Load Balancer / Reverse Proxy | Nginx Alpine | Redundant Layer 7 proxy nodes (Active/Passive or Round-Robin setup). They distribute incoming HTTP traffic evenly across the internal API Gateway cluster, ensuring continuous uptime. |
+| API Gateway Cluster (x3) | Orchestrator / Proxy Service | Node.js, Express.js | Scaled cluster of reverse-proxies. Protects the internal system boundary by providing a unified endpoint. Intercepts incoming traffic, validates authorization (JWT), balances loads across inner microservices, and interacts directly with internal message brokers and caches. |
+| Auth Service | Logic Service | C++ Native (GCC, libbcrypt) | Handles intensive cryptographic computing requirements. Responsible for managing credential hashing, executing secure user registration/logins, and generating valid JSON Web Tokens (JWT). *Operates in strict isolation connected only to its database.* |
+| Product Service | Logic Service | Node.js, Express.js | Core domain element executing inventory algorithms. It queries, creates, updates, and removes available giftshop products, maintaining strong control over physical stock calculation rules. |
+| Order Service | Logic Service | Node.js, Express.js | Transactional logic processor for cart and billing behaviors. Aggregates active checkouts, calculates final totals, and generates async checkout events by publishing payloads directly to the RabbitMQ broker. |
+| Review Service | Logic Service | Python, FastAPI, Uvicorn | Independent processing node for customer feedback logic. Handles validations for ratings, captures textual opinions securely, and exposes product-rating aggregations. |
+| Notification Service | Logic Worker | Node.js | Headless background process. Subscribes to the RabbitMQ broker as a listener, reacting to newly registered orders by firing external email notifications via an SMTP connection and utilizing Redis for temporal operational state. |
 | Auth Database | Data Store | PostgreSQL 15 | Relational repository explicitly configured to securely encapsulate the persistent state of registered system user credentials. | 
-| Products DB | Data Store | PostgreSQL 15 | Persistent relational storage enforcing strong data consistency and schema constraints (ACID) over the store's merchandise parameters and historical inventory bounds. | 
-| Orders DB | Data Store | PostgreSQL 15 | Highly transactional relational schema managing the integrity of users' active carts and archiving deeply normalized invoicing relationships (orders and their underlying order items). | 
-| Reviews DB | Data Store | MongoDB 6 | Non-relational (Document) persistent layer enabling high-throughput writes for unpredictable text sizes regarding product reviews, utilizing a highly flexible BSON data structure. | 
-| RabbitMQ | Message Broker | Erlang (RabbitMQ Mgmt) | Execution element functioning as the centralized message bus. Implements durable operational queues, buffering transactional events until consuming workers are ready, completely decoupling producers and subscribers. | 
-| Redis | Data Cache | Redis 7 Alpine | Ultra-fast in-memory, key-value persistent storage used dynamically by the notification execution pipelines to maintain lightweight application states and log temporal operational progress safely. | 
+| Products DB | Data Store | PostgreSQL 15 | Persistent relational storage enforcing strong data consistency and schema constraints (ACID) over the store's merchandise parameters. | 
+| Orders DB | Data Store | PostgreSQL 15 | Highly transactional relational schema managing the integrity of active carts and archiving deeply normalized invoicing relationships. | 
+| Reviews DB | Data Store | MongoDB 6 | Non-relational (Document) persistent layer enabling high-throughput writes for unpredictable text sizes regarding product reviews, utilizing a flexible BSON data structure. | 
+| RabbitMQ | Message Broker | Erlang (RabbitMQ Mgmt) | Centralized asynchronous message bus. Implements durable operational queues linking the API Gateways, Order Service (Producers), and Notification Service (Consumer), completely decoupling request lifecycles. | 
+| Redis | Data Cache | Redis 7 Alpine | Ultra-fast in-memory, key-value persistent storage used dynamically by the API Gateways and Notification pipelines to maintain lightweight application states, rate limiting, and log temporal operational progress. | 
 
-#####  **Connectors:**
+##### **Connectors:**
 
-  - **Public Web Request (HTTP/HTTPS):** An asynchronous network connector that crosses the System Boundary from the External Client towards the internal web and gateway layers. It securely routes end-user inputs using generic network payloads.
-  - **Internal JSON Connectors:** Synchronous, protocol-bound connectors (running over standard TCP channels inside Docker) that mediate the execution between the API Gateway and the Logic Services. By utilizing JSON as the underlying payload mechanism, it guarantees that node-specific representations achieve perfect syntactic compatibility without compilation interference.
-  - **Relational Data Stream (SQL over TCP 5432):** A deeply stateful connection pool generated by language-specific drivers. It mediates continuous structured queries enforcing commit/rollback operations against the PostgreSQL schemas.
-  - **Document Data Stream (NoSQL Protocol over TCP 27017):** A specialized binary wire connector controlled by the pymongo driver. It links the Python review-service logic exclusively to the MongoDB container using continuous asynchronous byte flow transmissions for high I/O writing rates.
-  - **Asynchronous Message Bus (AMQP Protocol over TCP 5672):** A completely asynchronous push/pull connector facilitating the Publish-Subscribe mechanism between order-service and notification-service. Governed by RabbitMQ, this connector avoids thread blocking and gracefully manages time-outs or worker crashes without rejecting initial customer payloads.
+- **Public Web Request (HTTP/HTTPS):** An asynchronous network connector that crosses the System Boundary from the External Client towards the Frontends and Coordinator. It securely routes end-user inputs using generic network payloads.
+- **Reverse Proxy Stream (HTTP Proxy):** Internal HTTP connections navigating the high-availability layer. Links the Coordinator to the Nginx Load Balancers, and subsequently routes traffic from the Nginx nodes to the scaled API Gateway instances.
+- **Internal JSON Connectors (HTTP Internal):** Synchronous, protocol-bound connectors (running over standard TCP channels) that mediate the execution between the API Gateway Cluster and the internal Logic Services.
+- **Object Storage API (S3 Protocol / HTTP over TCP 9000):** A REST-based S3 compatible connector linking the Frontend SSR component directly to MinIO for heavy media file retrieval and uploads.
+- **Relational Data Stream (SQL over TCP 5432):** A deeply stateful connection pool generated by language-specific drivers. It mediates continuous structured queries enforcing commit/rollback operations against the isolated PostgreSQL schemas.
+- **Document Data Stream (NoSQL Protocol over TCP 27017):** A specialized binary wire connector controlled by the Python driver, linking the Review Service logic exclusively to the MongoDB container.
+- **Asynchronous Message Bus (AMQP Protocol over TCP 5672):** A completely asynchronous push/pull connector facilitating the Publish-Subscribe mechanism. It allows the API Gateways and Order Service to drop messages into queues, and the Notification Service to consume them without blocking the main HTTP threads.
+- **In-Memory Cache Stream (RESP Protocol over TCP 6379):** High-speed serialization protocol allowing the API Gateways and Notification Worker to execute nanosecond read/writes against Redis.
+- **External SMTP Stream (TCP 587):** An outbound network protocol connector utilized specifically by the Notification Worker to reach external Email Server Providers for sending transactional notifications.
 
- #### Description of Architectural Styles Used
+#### Description of Architectural Styles Used
+
+##### **High Availability & Redundancy Pattern**
+Introduced at the public boundary through the integration of a `Coordinator`, dual Load Balancers (`NGINX-LB` and `NGINX-LB-SPARE`), and an `API Gateway Cluster (x3)`.
+*Why it was chosen:* To eliminate single points of failure at the entry level. If a Gateway container crashes or a Primary Nginx node becomes unresponsive, the Router/Spare seamlessly redirects traffic to healthy instances, ensuring the store remains fully accessible during spikes or localized outages.
 
 ##### **Microservices Architectural Style**
-
 The principal approach divides the solution by strict sub-domains based on business context (Products, Orders, Reviews, and Users).
-Why it was chosen: It neutralizes catastrophic runtime failure. If the Review or Notification engines experience severe traffic drops, the system’s ability to take payments or process orders remains fully operational. It allows isolated debugging and individual container deployment methodologies, making it ideal for teams to work simultaneously without codebase overlap.
+*Why it was chosen:* It neutralizes catastrophic runtime failure. If the Review engine experiences severe drops, the system’s ability to take payments or process orders remains fully operational. It allows isolated debugging and individual container deployment methodologies.
 
 ##### **API Gateway Orchestration Pattern**
-
-Instead of exposing the full underlying system grid (5 individual microservices IPs), the architecture employs a single traffic control gate mapped via api-gateway.
-Why it was chosen: Primarily selected for internal resource cloaking and to alleviate cross-cutting structural complexities on the client. Secondarily, it centralizes all core JWT authentication rules acting as a firewall. Requests lacking authorization headers never breach the Gateway layer to reach isolated services, effectively creating a "Zero Trust" boundary policy internally.
+Instead of exposing the full underlying system grid, the architecture employs a traffic control gate (acting as a cluster). 
+*Why it was chosen:* Primarily selected for internal resource cloaking and to alleviate cross-cutting structural complexities on the client. It centralizes all core JWT authentication rules. Requests lacking authorization headers never breach the Gateway layer to reach isolated services, effectively creating a "Zero Trust" boundary policy internally.
 
 ##### **Polyglot Persistence & Programming Pattern**
-
-Software problems demand diverse paradigms; therefore, no unified tech-stack was aggressively imposed over the architecture.
-Why it was chosen: This system uses at least four distinct languages mapped deliberately to specific scenarios. Computationally punishing routines regarding cryptography leverage C++ Native capabilities on auth-service, generating results impossible to match by scripted runtimes. At the database tier, structural rigidity inside cart payments relies safely on relational ACID schemas via PostgreSQL, while unpredictable and highly variable text formats derived from reviews stream elegantly towards the schematic flexibility offered by the MongoDB Document architecture.
+Software problems demand diverse paradigms; therefore, no unified tech-stack was aggressively imposed.
+*Why it was chosen:* Computationally punishing routines regarding cryptography leverage C++ Native capabilities on the Auth Service. At the database tier, structural rigidity inside cart payments relies safely on relational ACID schemas via PostgreSQL, while variable text formats from reviews stream towards the schematic flexibility offered by MongoDB. Static media utilizes optimized S3 storage via MinIO.
 
 ##### **Event-Driven / Message Broker Pattern**
-
-Deployed explicitly in the lower runtime hierarchy involving the order-service, rabbitmq, and notification-service.
-Why it was chosen: It successfully implements behavioral decoupling (breaking chronological request barriers). In an integrated flow, a user generating an Order will receive a near-instant success response (HTTP 200/201) precisely because the system is deferring notification processes natively, throwing jobs onto the asynchronous RabbitMQ Queue without needing to stall main processors or awaiting SMTP protocols dynamically.
+Deployed explicitly in the lower runtime hierarchy involving the Gateways, Order Service, RabbitMQ, and Notification Worker.
+*Why it was chosen:* It successfully implements behavioral decoupling. A user generating an Order will receive a near-instant success response precisely because the system is deferring external communications (SMTP), throwing jobs onto the asynchronous RabbitMQ Queue without stalling main HTTP processors.
 
 ##### **Database-per-Service Structural Pattern**
-
 Enforcing strict isolation, absolutely no databases are shared or linked at an entity level amongst internal services.
-Why it was chosen: Data layers mirror the logic component topology exclusively. This structural requirement mitigates widespread migration problems commonly observed in big systems, ensuring that restructuring or wiping product tables inherently creates no compilation cascading breakdowns within order logic bounds.
-
----
+*Why it was chosen:* Data layers mirror the logic component topology exclusively. This structural requirement mitigates widespread migration problems, ensuring that restructuring product tables creates no compilation cascading breakdowns within auth or order logic bounds.
 
 ### 3.2 Deployment Structure
 

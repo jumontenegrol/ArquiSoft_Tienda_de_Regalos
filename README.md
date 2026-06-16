@@ -539,7 +539,176 @@ docker exec -it arquisoft_tienda_de_regalos-products-db-1 \
   psql -U postgres -d productos -c "SELECT count(*) FROM pg_stat_activity;"
 # Expected: never exceeds 10 + 1 (the psql session itself)
 ```
+### R3 — Active Redundancy (Hot Spare)
 
+**Tactic:** Redundant Spare (Recover from Faults > Preparation and Repair)  
+**Pattern:** Active Redundancy — fan-out coordinator in front of nginx-lb  
+**File:** `coordinator/coordinator.js`, `docker-compose.yml`
+
+#### Quality Scenario
+
+| Element | Description |
+|---------|-------------|
+| **Source** | Hardware or runtime failure — the nginx-lb container crashes or becomes unreachable due to an unhandled process error or network partition. |
+| **Stimulus** | The `nginx-lb` (active node) stops responding to HTTP requests. The coordinator receives a connection timeout or connection-refused error on all outgoing calls to `http://nginx-lb:80`. |
+| **Artifact** | The `nginx-lb` service — the load balancer sitting in front of the three api-gateway instances, acting as the single traffic entry point for all client requests. |
+| **Environment** | Normal operation during business hours. Users are actively browsing products, logging in, and placing orders. Both `nginx-lb` (active) and `nginx-lb-spare` (spare) are running and processing every request in parallel. |
+| **Response** | The coordinator detects the failure of the active node on the first failed request. It immediately promotes `nginx-lb-spare` to primary and routes all subsequent requests to it. The response that triggered the failover is served using the spare's result. The coordinator sets the `X-Failover: true` response header and logs the promotion event. |
+| **Response Measure** | Failover completes within a single request cycle (under 500 ms, bounded by the coordinator's 5 s timeout). Zero requests are lost because both nodes processed the triggering request in parallel. Clients receive HTTP 200 with no visible error. |
+
+#### How it works
+
+A lightweight **coordinator** service (Node.js, Express 5) sits in front of both nginx load balancers as the new external entry point on port 80. On every incoming request it fires two parallel `axios` calls — one to `nginx-lb:80` (primary) and one to `nginx-lb-spare:80` (secondary). Because both nodes always process every request, the spare maintains fully synchronized state at all times. If the primary fails, the coordinator swaps roles in memory and returns the spare's response to the client transparently. A dedicated `GET /coordinator/state` endpoint exposes the current primary/secondary mapping at any time.
+
+The `X-Failover: true` response header (instead of a body field) is used to signal failover events because endpoints like `GET /api/products` return a raw JSON array — injecting extra fields into the body would break the API contract.
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant Coordinator
+    participant nginx-lb (active)
+    participant nginx-lb-spare
+
+    Client->>Coordinator: GET /api/products
+    par fan-out
+        Coordinator->>nginx-lb (active): GET /api/products
+        Coordinator->>nginx-lb-spare: GET /api/products
+    end
+    nginx-lb (active)-->>Coordinator: 200 OK [products]
+    nginx-lb-spare-->>Coordinator: 200 OK [products]
+    Coordinator-->>Client: 200 OK [products] (X-Served-By: primary)
+
+    Note over nginx-lb (active): Container crashes
+
+    Client->>Coordinator: GET /api/products
+    par fan-out
+        Coordinator->>nginx-lb (active): GET /api/products
+        Coordinator->>nginx-lb-spare: GET /api/products
+    end
+    nginx-lb (active)--xCoordinator: timeout / connection refused
+    nginx-lb-spare-->>Coordinator: 200 OK [products]
+    Note over Coordinator: Promotes spare to primary
+    Coordinator-->>Client: 200 OK [products] (X-Failover: true)
+```
+
+#### Architectural structure
+
+```
+Browser / Users
+      │ HTTP/HTTPS
+      ▼
+  coordinator                 ← NEW — Hot Spare entry point (port 80)
+  ┌───────────────────────────────────────────────┐
+  │  fan-out in parallel to both nginx nodes      │
+  └──────────────────┬────────────────────────────┘
+                     │
+          ┌──────────┴──────────┐
+          ▼                     ▼
+      nginx-lb             nginx-lb-spare
+     (active)               (spare)
+          │                     │
+          └──────────┬──────────┘
+                     │ round-robin
+          ┌──────────┼──────────┐
+          ▼          ▼          ▼
+    api-gateway-1  api-gateway-2  api-gateway-3   ← Cluster (3 replicas)
+          │
+          ▼
+    microservices (auth, product, order, review)
+```
+
+#### Key configuration excerpts
+
+**`coordinator/coordinator.js` — fan-out and failover logic**
+
+```js
+let primary   = process.env.PRIMARY_URL   || "http://nginx-lb:80";
+let secondary = process.env.SECONDARY_URL || "http://nginx-lb-spare:80";
+
+app.all("/{*splat}", async (req, res) => {
+  if (req.path === "/coordinator/state") {
+    return res.json({ primary, secondary });
+  }
+
+  const [primaryResult, secondaryResult] = await Promise.all([
+    tryRequest(primary,   req.method, req.path, req.body, forwardHeaders),
+    tryRequest(secondary, req.method, req.path, req.body, forwardHeaders),
+  ]);
+
+  // Primary OK → respond normally
+  if (primaryResult.ok) {
+    res.set("X-Served-By", "primary");
+    return res.status(primaryResult.status).json(primaryResult.data);
+  }
+
+  // Primary failed, spare responded → failover
+  if (secondaryResult.ok) {
+    [primary, secondary] = [secondary, primary];   // swap in memory
+    res.set("X-Failover", "true");
+    res.set("X-Now-Primary", primary);
+    return res.status(secondaryResult.status).json(secondaryResult.data);
+  }
+
+  return res.status(502).json({ error: "Both nodes unreachable" });
+});
+```
+
+**`docker-compose.yml` — coordinator and spare node**
+
+```yaml
+coordinator:
+  build:
+    context: ./coordinator
+    dockerfile: Dockerfile.coordinator
+  ports:
+    - "80:8080"                          # external entry point
+  environment:
+    - PRIMARY_URL=http://nginx-lb:80
+    - SECONDARY_URL=http://nginx-lb-spare:80
+  depends_on: [nginx-lb, nginx-lb-spare]
+  networks: [public-network]
+
+nginx-lb:                                # active node — no external port
+  image: nginx:alpine
+  volumes:
+    - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+  networks: [public-network]
+
+nginx-lb-spare:                          # spare node — identical config
+  image: nginx:alpine
+  volumes:
+    - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+  networks: [public-network]
+```
+
+#### Verification
+
+```bash
+# 1. Check initial coordinator state
+curl http://localhost:80/coordinator/state
+# Expected: {"primary":"http://nginx-lb:80","secondary":"http://nginx-lb-spare:80"}
+
+# 2. Normal request — served by primary
+curl -I http://localhost:80/api/products
+# Expected: HTTP 200, X-Served-By: primary
+
+# 3. Simulate failure — stop the active nginx-lb
+docker stop arquisoft_tienda_de_regalos-nginx-lb-1
+
+# 4. Next request is served by spare with zero interruption
+curl -I http://localhost:80/api/products
+# Expected: HTTP 200, X-Failover: true, X-Now-Primary: http://nginx-lb-spare:80
+
+# 5. Coordinator has promoted the spare
+curl http://localhost:80/coordinator/state
+# Expected: {"primary":"http://nginx-lb-spare:80","secondary":"http://nginx-lb:80"}
+
+# 6. Restart original node — system recovers
+docker start arquisoft_tienda_de_regalos-nginx-lb-1
+
+# Run the automated test suite
+chmod +x test-failover.sh && ./test-failover.sh
+```
 ---
 
 ### Summary Table
@@ -552,6 +721,5 @@ docker exec -it arquisoft_tienda_de_regalos-products-db-1 \
 | P2 | Performance | Event-Driven | `order-service/` + `notification-service/` | RabbitMQ AMQP · async publish/subscribe |
 | R1 | Reliability | Circuit Breaker | `api-gateway/index.js` | timeout 5 s · threshold 50 % · reset 30 s |
 | R2 | Reliability | Bulkhead | `*-service/index.js` (pg.Pool) | max 10 conns · timeout 5 s |
+| R3 | Reliability | Active Redundancy | `coordinator/coordinator.js` | Parallel fan-out · < 500ms failover |
 ---
-
-

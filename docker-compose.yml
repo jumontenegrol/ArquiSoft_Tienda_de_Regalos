@@ -54,7 +54,6 @@ services:
     depends_on:
       - product-service
       - order-service
-      - notification-service
       - auth-service
       - rabbitmq
       - redis

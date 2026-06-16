@@ -1,0 +1,60 @@
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: notification-service-hpa
+  namespace: default
+spec:
+  # ========================================
+  # AUTOESCALADO AUTOMÁTICO (OPCIONAL)
+  # ========================================
+  # Este recurso NO es obligatorio para el Lab
+  # pero permite que K8s automáticamente aumente/disminuya replicas
+  # según la carga de CPU
+  
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: notification-service
+  
+  # ========================================
+  # RANGO DE REPLICAS
+  # ========================================
+  minReplicas: 2        # Mínimo: mantener siempre 2 pods
+  maxReplicas: 10       # Máximo: crear hasta 10 pods si la carga es alta
+  
+  # ========================================
+  # MÉTRICAS DE ESCALADO
+  # ========================================
+  metrics:
+  # Escalar basado en CPU
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70  # Escalar si CPU promedio > 70%
+  
+  # Escalar basado en memoria (opcional)
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80  # Escalar si memoria promedio > 80%
+  
+  # ========================================
+  # POLÍTICAS DE ESCALADO
+  # ========================================
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+      - type: Percent
+        value: 100              # Aumentar replicas un 100% cuando se necesite
+        periodSeconds: 60
+    scaleDown:
+      stabilizationWindowSeconds: 300  # Esperar 5 minutos antes de reducir
+      policies:
+      - type: Percent
+        value: 50               # Reducir 50% de las replicas
+        periodSeconds: 60

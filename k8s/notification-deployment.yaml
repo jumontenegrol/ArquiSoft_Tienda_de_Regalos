@@ -1,0 +1,111 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notification-service
+  namespace: default
+  labels:
+    app: notification-service
+spec:
+  # ========================================
+  # CLUSTER PATTERN: Replicas
+  # ========================================
+  # 3 replicas garantizan que siempre hay 3 instancias del servicio
+  # en ejecución, distribuidas en los nodos del cluster.
+  # Kubernetes automáticamente:
+  # - Crea nuevos pods si alguno falla (self-healing)
+  # - Distribuye la carga entre todas las replicas
+  # - Recrea pods si se elimina un nodo
+  replicas: 3
+  
+  selector:
+    matchLabels:
+      app: notification-service
+  
+  template:
+    metadata:
+      labels:
+        app: notification-service
+    spec:
+      # ========================================
+      # CONTENEDOR
+      # ========================================
+      containers:
+      - name: notification-service
+        # Imagen: notification-service:latest (cargada en Minikube)
+        image: notification-service:latest
+        imagePullPolicy: Never  # Usar imagen local en Minikube (no pull de registry)
+        
+        # Puerto donde escucha el servicio
+        ports:
+        - name: http
+          containerPort: 7000
+          protocol: TCP
+        
+        # ========================================
+        # VARIABLES DE ENTORNO (desde ConfigMap)
+        # ========================================
+        envFrom:
+        - configMapRef:
+            name: notification-config
+        
+        # ========================================
+        # HEALTH CHECKS - LIVENESS & READINESS
+        # ========================================
+        # Liveness Probe: ¿Sigue vivo el pod?
+        # Si falla, Kubernetes reinicia el contenedor
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 7000
+          initialDelaySeconds: 30      # Espera 30s antes de la primera prueba
+          periodSeconds: 10             # Prueba cada 10s
+          timeoutSeconds: 5             # Timeout de 5s por prueba
+          failureThreshold: 3           # Reinicia si falla 3 veces seguidas
+        
+        # Readiness Probe: ¿Está listo para recibir tráfico?
+        # Si falla, Kubernetes quita el pod del Service (no recibe tráfico)
+        # pero NO reinicia el contenedor
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 7000
+          initialDelaySeconds: 10       # Espera 10s antes de la primera prueba
+          periodSeconds: 5              # Prueba cada 5s
+          timeoutSeconds: 3
+          failureThreshold: 2
+        
+        # ========================================
+        # RECURSOS (CPU y Memoria)
+        # ========================================
+        # Requests: recursos que K8s RESERVA para el pod
+        # Limits: máximo que puede usar el pod
+        resources:
+          requests:
+            cpu: 100m                   # 0.1 CPU
+            memory: 128Mi               # 128 MB
+          limits:
+            cpu: 500m                   # 0.5 CPU
+            memory: 512Mi               # 512 MB
+      
+      # ========================================
+      # POLÍTICA DE REINICIO
+      # ========================================
+      # Always: reinicia el contenedor si muere (incluso si termina normalmente)
+      restartPolicy: Always
+      
+      # ========================================
+      # AFFINIDAD (opcional)
+      # ========================================
+      # Intenta distribuir los pods en diferentes nodos para mayor redundancia
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - notification-service
+              topologyKey: kubernetes.io/hostname

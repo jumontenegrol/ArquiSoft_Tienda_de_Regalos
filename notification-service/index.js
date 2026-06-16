@@ -187,6 +187,11 @@ app.get("/", (req, res) => {
   res.json({ message: "Notification Service corriendo ✅" });
 });
 
+// ── Health endpoint para Kubernetes ─────────────────────
+app.get("/health", (req, res) => {
+  res.status(200).json({ status: "healthy", service: "notification-service" });
+});
+
 // ── Arranque ───────────────────────────────────────────
 async function start() {
   await connectRedis();

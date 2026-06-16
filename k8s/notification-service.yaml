@@ -1,0 +1,30 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: notification-service
+  namespace: default
+  labels:
+    app: notification-service
+spec:
+  # ========================================
+  # TIPO DE SERVICE
+  # ========================================
+  # ClusterIP: expone el servicio solo dentro del cluster (sin acceso externo)
+  # Kubernetes automáticamente crea un IP interno (ej: 10.96.0.10)
+  # y distribuye el tráfico entre todos los pods con label "app: notification-service"
+  type: ClusterIP
+  
+  selector:
+    app: notification-service
+  
+  ports:
+  - name: http
+    protocol: TCP
+    port: 7000           # Puerto del Service (virtual, interno a K8s)
+    targetPort: 7000     # Puerto del contenedor
+  
+  # ========================================
+  # POLÍTICA DE SESIONES
+  # ========================================
+  # None: Sin afinidad (distribución de carga round-robin)
+  sessionAffinity: None
